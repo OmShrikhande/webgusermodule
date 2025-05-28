@@ -1,8 +1,0 @@
-import React from 'react'
-import LocationTracker from './location-tracker'
-
-const Tracer = () => {
-  return <LocationTracker />
-}
-
-export default Tracer
