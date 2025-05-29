@@ -12,6 +12,8 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -21,39 +23,40 @@ export default function Login() {
   
   const navigation = useNavigation();
 
-  // Hide the header for this screen
-  React.useEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
+  useEffect(() => {
+    navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
   const handleLogin = async () => {
-    // Reset error state
     setError('');
     
-    // Basic validation
     if (!email || !password) {
       setError('Please enter both email and password');
       return;
     }
-    
+
+    setIsLoading(true);
+
     try {
-      setIsLoading(true);
-      
-      // Here you would typically make an API call to authenticate the user
-      // For now, we'll simulate a successful login after a short delay
-      
-      setTimeout(() => {
-        setIsLoading(false);
-        // Navigate to the tabs/home screen after successful login
-        router.replace('/(tabs)/home');
-      }, 1500);
-      
+      const response = await axios.post('http://192.168.43.211:5000/api/admin/login', {
+        email,
+        password
+      });
+
+      const { token } = response.data;
+
+      await AsyncStorage.setItem('token', token);
+
+      setIsLoading(false);
+      router.replace('/(tabs)/home');
     } catch (err) {
       setIsLoading(false);
-      setError('Login failed. Please check your credentials and try again.');
-      console.error('Login error:', err);
+      if (err.response && err.response.data && err.response.data.message) {
+        setError(err.response.data.message); // Display specific backend error
+      } else {
+        setError('Could not connect to server. Please check your network or server status.');
+      }
+      console.error('Login error:', err.message);
     }
   };
 
@@ -73,9 +76,8 @@ export default function Login() {
         
         <View style={styles.formContainer}>
           <Text style={styles.title}>Login</Text>
-          
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          
+
           <TextInput
             style={styles.input}
             placeholder="Email"
@@ -85,7 +87,7 @@ export default function Login() {
             keyboardType="email-address"
             autoCapitalize="none"
           />
-          
+
           <TextInput
             style={styles.input}
             placeholder="Password"
@@ -94,7 +96,7 @@ export default function Login() {
             onChangeText={setPassword}
             secureTextEntry
           />
-          
+
           <TouchableOpacity 
             style={styles.loginButton}
             onPress={handleLogin}
@@ -104,11 +106,11 @@ export default function Login() {
               {isLoading ? 'Logging in...' : 'Login'}
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.forgotPassword}>
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
-          
+
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>Don't have an account? </Text>
             <TouchableOpacity>
@@ -122,24 +124,10 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  logo: {
-    width: 100,
-    height: 100,
-    borderRadius: 15,
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  scrollContainer: { flexGrow: 1, justifyContent: 'center', padding: 20 },
+  logoContainer: { alignItems: 'center', marginBottom: 40 },
+  logo: { width: 100, height: 100, borderRadius: 15 },
   appName: {
     fontSize: 28,
     fontFamily: 'flux-bold',
@@ -180,33 +168,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
   },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  forgotPassword: {
-    alignItems: 'center',
-    marginTop: 15,
-  },
-  forgotPasswordText: {
-    color: Colors.PRIMARY,
-    fontSize: 14,
-  },
+  loginButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  forgotPassword: { alignItems: 'center', marginTop: 15 },
+  forgotPasswordText: { color: Colors.PRIMARY, fontSize: 14 },
   signupContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: 20,
   },
-  signupText: {
-    color: '#666',
-    fontSize: 14,
-  },
-  signupLink: {
-    color: Colors.PRIMARY,
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
+  signupText: { color: '#666', fontSize: 14 },
+  signupLink: { color: Colors.PRIMARY, fontSize: 14, fontWeight: 'bold' },
   errorText: {
     color: 'red',
     marginBottom: 15,
