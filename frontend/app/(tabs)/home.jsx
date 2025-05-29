@@ -31,6 +31,7 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 };
 
 // Define background location task
+// In TaskManager.defineTask
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
     console.error('Background location error:', error);
@@ -38,34 +39,23 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   }
   if (data) {
     const { locations } = data;
-    const { latitude, longitude } = locations[0].coords;
-    const distance = calculateDistance(
-      latitude,
-      longitude,
-      OFFICE_LOCATION.latitude,
-      OFFICE_LOCATION.longitude
-    );
-
-    if (distance > MAX_DISTANCE) {
-      try {
-        const token = await AsyncStorage.getItem('token');
-        const userId = await AsyncStorage.getItem('userId');
-        if (token && userId) {
-          await axios.post(
-            'http://192.168.1.57:5000/api/alert-out-of-range',
-            {
-              userId,
-              location: { latitude, longitude },
-            },
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            }
-          );
-        }
-      } catch (err) {
-        console.error('Error sending alert:', err.message);
-      }
+    const userId = await AsyncStorage.getItem('userId'); // <-- get userId
+    if (!userId) {
+      console.warn('No userId found in storage');
+      return;
     }
+    const location = locations[0];
+    fetch('http://YOUR_SERVER/api/store-location', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        location: {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        },
+      }),
+    });
   }
 });
 
@@ -234,32 +224,57 @@ const Home = () => {
 
   // Check location periodically in foreground
   useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        let location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        const distance = calculateDistance(
-          location.coords.latitude,
-          location.coords.longitude,
-          OFFICE_LOCATION.latitude,
-          OFFICE_LOCATION.longitude
-        );
+  const interval = setInterval(async () => {
+    try {
+      let location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      const { latitude,
+      longitude } = location.coords;
+      const distance = calculateDistance(
+        latitude,
+        longitude,
+        OFFICE_LOCATION.latitude,
+        OFFICE_LOCATION.longitude
+      );
 
-        if (distance > MAX_DISTANCE) {
-          Alert.alert(
-            'Geofence Alert',
-            `You are ${Math.round(distance)}m away from the office. Please return to the office area.`,
-            [{ text: 'OK' }]
-          );
-        }
-      } catch (error) {
-        console.error('Foreground location error:', error);
+      // Add logging to verify location data
+      console.log('Foreground location:', { userId, latitude, longitude, distance });
+
+      // Send location to backend
+      const token = await AsyncStorage.getItem('token');
+      const userId = await AsyncStorage.getItem('userId');
+      if (token && userId) {
+        await axios.post(
+          'http://192.168.1.57:5000/api/store-location',
+          {
+            userId,
+            location: { latitude, longitude },
+          },
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        ).then(() => console.log('Foreground location sent to backend'))
+         .catch(err => console.error('Foreground store-location error:', err.message));
+      } else {
+        console.warn('Foreground: Missing token or userId');
       }
-    }, 60000); // Check every minute
 
-    return () => clearInterval(interval);
-  }, []);
+      // Check for geofence breach
+      if (distance > MAX_DISTANCE) {
+        Alert.alert(
+          'Geofence Alert',
+          `You are ${Math.round(distance)}m away from the office. Please return to the office area.`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Foreground location error:', error);
+    }
+  }, 60000); // Check every minute
+
+  return () => clearInterval(interval);
+}, []);
 
   const getStatusColor = (status) => {
     switch (status.toLowerCase()) {

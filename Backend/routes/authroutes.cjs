@@ -5,9 +5,9 @@ const User = require('../model/usermodel.cjs');
 const Alert = require('../model/alertModel.cjs');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
-const { isWithinOfficeRange } = require('../utils/locationUtils.cjs');
+const { calculateDistance, isWithinOfficeRange } = require('../utils/locationUtils.cjs');
 const { officeLocation, maxAllowedDistance } = require('../config/locationConfig.cjs');
-
+const Location = require('../model/locationModel.cjs');
 // Configure Nodemailer transporter
 const transporter = nodemailer.createTransport({
     service: 'gmail', // Use your SMTP service
@@ -189,5 +189,61 @@ router.post('/alert-out-of-range', async (req, res) => {
         });
     }
 });
+// Backend/routes/authroutes.cjs
+// ... (other imports and routes)
+router.post('/store-location', async (req, res) => {
+  try {
+    const { userId, location } = req.body;
+    const { latitude, longitude } = location || {};
 
+    if (!userId || !location || latitude === undefined || longitude === undefined) {
+      console.warn('Invalid store-location request:', req.body);
+      return res.status(400).json({
+        success: false,
+        message: 'User ID and location (latitude, longitude) are required',
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      console.warn('User not found for userId:', userId);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    // Calculate distance from office
+    const distance = Math.round(
+      calculateDistance(
+        latitude,
+        longitude,
+        officeLocation.latitude,
+        officeLocation.longitude
+      )
+    );
+
+    // Save location
+    console.log('Saving location:', { userId, latitude, longitude, distance });
+    const locationEntry = new Location({
+      userId,
+      location: { latitude, longitude },
+      distance,
+    });
+    await locationEntry.save();
+    console.log('Location saved successfully');
+
+    res.status(200).json({
+      success: true,
+      message: 'Location stored successfully',
+    });
+  } catch (error) {
+    console.error('Store location error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error storing location',
+      error: error.message,
+    });
+  }
+});
 module.exports = router;
