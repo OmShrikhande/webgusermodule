@@ -20,6 +20,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [attendanceInfo, setAttendanceInfo] = useState(null);
   
   const navigation = useNavigation();
 
@@ -29,6 +30,7 @@ export default function Login() {
 
   const handleLogin = async () => {
     setError('');
+    setAttendanceInfo(null);
     
     if (!email || !password) {
       setError('Please enter both email and password');
@@ -38,17 +40,35 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://192.168.43.211:5000/api/admin/login', {
+      const response = await axios.post('http://192.168.1.57:5000/api/admin/login', {
         email,
         password
       });
 
-      const { token } = response.data;
+      const { token, message, attendanceTime, attendanceDate } = response.data;
 
       await AsyncStorage.setItem('token', token);
-
-      setIsLoading(false);
-      router.replace('/(tabs)/home');
+      
+      // Set attendance information
+      if (attendanceTime && attendanceDate) {
+        const isFirstAttendance = message && message.includes('marked successfully');
+        
+        setAttendanceInfo({
+          time: attendanceTime,
+          date: attendanceDate,
+          message: message || 'Attendance marked successfully',
+          isFirstAttendance: isFirstAttendance
+        });
+        
+        // Show attendance message for 2 seconds before redirecting
+        setIsLoading(false);
+        setTimeout(() => {
+          router.replace('/(tabs)/home');
+        }, 2000);
+      } else {
+        setIsLoading(false);
+        router.replace('/(tabs)/home');
+      }
     } catch (err) {
       setIsLoading(false);
       if (err.response && err.response.data && err.response.data.message) {
@@ -77,6 +97,31 @@ export default function Login() {
         <View style={styles.formContainer}>
           <Text style={styles.title}>Login</Text>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {attendanceInfo ? (
+            <View style={[
+              styles.attendanceContainer, 
+              attendanceInfo.isFirstAttendance ? styles.firstAttendance : styles.existingAttendance
+            ]}>
+              <Text style={[
+                styles.attendanceMessage,
+                attendanceInfo.isFirstAttendance ? styles.successText : styles.warningText
+              ]}>
+                {attendanceInfo.message}
+              </Text>
+              <Text style={[
+                styles.attendanceText,
+                attendanceInfo.isFirstAttendance ? styles.successText : styles.warningText
+              ]}>
+                Date: {attendanceInfo.date}
+              </Text>
+              <Text style={[
+                styles.attendanceText,
+                attendanceInfo.isFirstAttendance ? styles.successText : styles.warningText
+              ]}>
+                Time: {attendanceInfo.time}
+              </Text>
+            </View>
+          ) : null}
 
           <TextInput
             style={styles.input}
@@ -182,5 +227,35 @@ const styles = StyleSheet.create({
     color: 'red',
     marginBottom: 15,
     textAlign: 'center',
+  },
+  attendanceContainer: {
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 15,
+    borderWidth: 1,
+  },
+  firstAttendance: {
+    backgroundColor: '#e6f7e6',
+    borderColor: '#c3e6cb',
+  },
+  existingAttendance: {
+    backgroundColor: '#fff3cd',
+    borderColor: '#ffeeba',
+  },
+  attendanceMessage: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  attendanceText: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  successText: {
+    color: '#155724', // Green text for first attendance
+  },
+  warningText: {
+    color: '#856404', // Yellow/amber text for existing attendance
   },
 });

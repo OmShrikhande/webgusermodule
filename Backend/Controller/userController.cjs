@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../model/usermodel.cjs');
+const Attendance = require('../model/attendanceModel.cjs');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
@@ -27,9 +28,43 @@ exports.loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
+    // Check if attendance already marked for today
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    let attendanceMessage = 'Attendance marked successfully';
+    let attendanceTime = now.toLocaleTimeString();
+    let attendanceDate = now.toLocaleDateString();
+    
+    // Try to find existing attendance for today
+    const existingAttendance = await Attendance.findOne({
+      userId: user._id,
+      date: today
+    });
+    
+    if (!existingAttendance) {
+      // If no attendance record exists for today, create one
+      const attendance = new Attendance({
+        userId: user._id,
+        loginTime: now,
+        date: today
+      });
+      await attendance.save();
+    } else {
+      // Attendance already marked for today
+      attendanceMessage = 'Attendance already marked for today';
+      attendanceTime = new Date(existingAttendance.loginTime).toLocaleTimeString();
+      attendanceDate = existingAttendance.date;
+    }
+
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1h' });
 
-    res.json({ token });
+    res.json({ 
+      token,
+      message: attendanceMessage,
+      attendanceTime: attendanceTime,
+      attendanceDate: attendanceDate
+    });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ message: 'Server error' });
@@ -66,6 +101,36 @@ exports.login = async (req, res) => {
         message: 'Authentication failed. Incorrect password.' 
       });
     }
+
+    // Check if attendance already marked for today
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    let attendanceMessage = 'Login successful. Attendance marked.';
+    let attendanceTime = now.toLocaleTimeString();
+    let attendanceDate = now.toLocaleDateString();
+    
+    // Try to find existing attendance for today
+    const existingAttendance = await Attendance.findOne({
+      userId: user._id,
+      date: today
+    });
+    
+    if (!existingAttendance) {
+      // If no attendance record exists for today, create one
+      const attendance = new Attendance({
+        userId: user._id,
+        loginTime: now,
+        date: today
+      });
+      await attendance.save();
+    } else {
+      // Attendance already marked for today
+      attendanceMessage = 'Login successful. Attendance was already marked earlier today.';
+      attendanceTime = new Date(existingAttendance.loginTime).toLocaleTimeString();
+      attendanceDate = existingAttendance.date;
+    }
+
     const token = jwt.sign(
       { userId: user._id, email: user.email }, 
       JWT_SECRET, 
@@ -73,12 +138,16 @@ exports.login = async (req, res) => {
     );
     res.status(200).json({ 
       success: true, 
-      message: 'Login successful', 
+      message: attendanceMessage, 
       token, 
       user: { 
         id: user._id,
         email: user.email 
-      } 
+      },
+      attendance: {
+        time: attendanceTime,
+        date: attendanceDate
+      }
     });
   } catch (error) {
     console.error('Login error:', error);
