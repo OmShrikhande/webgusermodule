@@ -1,107 +1,193 @@
 const express = require('express');
-     const router = express.Router();
-     const authController = require('../Controller/userController.cjs');
-     const User = require('../model/usermodel.cjs');
-     const bcrypt = require('bcryptjs');
+const router = express.Router();
+const authController = require('../Controller/userController.cjs');
+const User = require('../model/usermodel.cjs');
+const Alert = require('../model/alertModel.cjs');
+const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
+const { isWithinOfficeRange } = require('../utils/locationUtils.cjs');
+const { officeLocation, maxAllowedDistance } = require('../config/locationConfig.cjs');
 
-     // Existing routes
-     router.post('/login', authController.login);
-     router.post('/admin/login', authController.loginUser);
-     router.get('/test-connection', async (req, res) => {
-         try {
-             const users = await User.find({}).select('email -_id').limit(5);
-             const totalCount = await User.countDocuments({});
-             if (users && users.length > 0) {
-                 return res.status(200).json({
-                     success: true,
-                     message: 'Successfully connected to the database and retrieved users',
-                     totalUsersInDatabase: totalCount,
-                     sampleSize: users.length,
-                     sampleUsers: users.map(user => ({ email: user.email }))
-                 });
-             } else {
-                 return res.status(200).json({
-                     success: true,
-                     message: 'Connected to database but no users found in the collection',
-                     totalUsersInDatabase: 0
-                 });
-             }
-         } catch (error) {
-             console.error('Database test error:', error);
-             return res.status(500).json({
-                 success: false,
-                 message: 'Error testing database connection',
-                 error: error.message
-             });
-         }
-     });
+// Configure Nodemailer transporter
+const transporter = nodemailer.createTransport({
+    service: 'gmail', // Use your SMTP service
+    auth: {
+        user: process.env.EMAIL_USER, // Add to .env
+        pass: process.env.EMAIL_PASS  // Add to .env
+    }
+});
 
-     router.get('/check-email/:email', async (req, res) => {
-         try {
-             const { email } = req.params;
-             if (!email) {
-                 return res.status(400).json({
-                     success: false,
-                     message: 'Email parameter is required'
-                 });
-             }
-             const user = await User.findOne({ email }).select('email -_id');
-             if (user) {
-                 return res.status(200).json({
-                     success: true,
-                     message: 'Email exists in the database',
-                     exists: true
-                 });
-             } else {
-                 return res.status(200).json({
-                     success: true,
-                     message: 'Email does not exist in the database',
-                     exists: false
-                 });
-             }
-         } catch (error) {
-             console.error('Email check error:', error);
-             return res.status(500).json({
-                 success: false,
-                 message: 'Error checking email in database',
-                 error: error.message
-             });
-         }
-     });
+// Existing routes
+router.post('/login', authController.login);
+router.post('/admin/login', authController.loginUser);
+router.get('/test-connection', async (req, res) => {
+    try {
+        const users = await User.find({}).select('email -_id').limit(5);
+        const totalCount = await User.countDocuments({});
+        if (users && users.length > 0) {
+            return res.status(200).json({
+                success: true,
+                message: 'Successfully connected to the database and retrieved users',
+                totalUsersInDatabase: totalCount,
+                sampleSize: users.length,
+                sampleUsers: users.map(user => ({ email: user.email }))
+            });
+        } else {
+            return res.status(200).json({
+                success: true,
+                message: 'Connected to database but no users found in the collection',
+                totalUsersInDatabase: 0
+            });
+        }
+    } catch (error) {
+        console.error('Database test error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error testing database connection',
+            error: error.message
+        });
+    }
+});
 
-     // New registration route
-     router.post('/register', async (req, res) => {
-         try {
-             const { email, password } = req.body;
-             if (!email || !password) {
-                 return res.status(400).json({
-                     success: false,
-                     message: 'Email and password are required'
-                 });
-             }
-             const existingUser = await User.findOne({ email });
-             if (existingUser) {
-                 return res.status(400).json({
-                     success: false,
-                     message: 'Email already exists'
-                 });
-             }
-             const hashedPassword = await bcrypt.hash(password, 10);
-             const newUser = new User({ email, password: hashedPassword });
-             await newUser.save();
-             res.status(201).json({
-                 success: true,
-                 message: 'User registered successfully'
-             });
-         } catch (error) {
-             console.error('Registration error:', error);
-             res.status(500).json({
-                 success: false,
-                 message: 'Error registering user',
-                 error: error.message
-             });
-         }
-     });
+router.get('/check-email/:email', async (req, res) => {
+    try {
+        const { email } = req.params;
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email parameter is required'
+            });
+        }
+        const user = await User.findOne({ email }).select('email -_id');
+        if (user) {
+            return res.status(200).json({
+                success: true,
+                message: 'Email exists in the database',
+                exists: true
+            });
+        } else {
+            return res.status(200).json({
+                success: true,
+                message: 'Email does not exist in the database',
+                exists: false
+            });
+        }
+    } catch (error) {
+        console.error('Email check error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error checking email in database',
+            error: error.message
+        });
+    }
+});
 
-     module.exports = router;
-     
+router.post('/register', async (req, res) => {
+    try {
+        const { email, password, role } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email and password are required'
+            });
+        }
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email already exists'
+            });
+        }
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const newUser = new User({ email, password: hashedPassword, role: role || 'user' });
+        await newUser.save();
+        res.status(201).json({
+            success: true,
+            message: 'User registered successfully'
+        });
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error registering user',
+            error: error.message
+        });
+    }
+});
+
+// New alert endpoint
+router.post('/alert-out-of-range', async (req, res) => {
+    try {
+        const { userId, location } = req.body;
+        if (!userId || !location || !location.latitude || !location.longitude) {
+            return res.status(400).json({
+                success: false,
+                message: 'User ID and location are required'
+            });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        const distance = Math.round(isWithinOfficeRange(
+            location.latitude,
+            location.longitude,
+            officeLocation.latitude,
+            officeLocation.longitude,
+            Infinity
+        ));
+
+        if (distance <= maxAllowedDistance) {
+            return res.status(400).json({
+                success: false,
+                message: 'User is within office range'
+            });
+        }
+
+        // Log alert
+        const alert = new Alert({
+            userId,
+            message: `User ${user.email} moved ${distance}m away from office`,
+            location: {
+                latitude: location.latitude,
+                longitude: location.longitude,
+                distance
+            }
+        });
+        await alert.save();
+
+        // Find admin
+        const admin = await User.findOne({ role: 'admin' });
+        if (!admin) {
+            console.warn('No admin found for notification');
+        } else {
+            // Send email to admin
+            const mailOptions = {
+                from: process.env.EMAIL_USER,
+                to: admin.email,
+                subject: 'Geofence Alert: User Out of Range',
+                text: `User ${user.email} has moved ${distance}m away from the office at ${new Date().toLocaleString()}. Location: (${location.latitude}, ${location.longitude}).`
+            };
+            await transporter.sendMail(mailOptions);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Alert processed and notifications sent'
+        });
+    } catch (error) {
+        console.error('Alert error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error processing alert',
+            error: error.message
+        });
+    }
+});
+
+module.exports = router;

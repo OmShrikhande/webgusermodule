@@ -10,10 +10,11 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -21,20 +22,70 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [attendanceInfo, setAttendanceInfo] = useState(null);
-  
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationError, setLocationError] = useState('');
+
   const navigation = useNavigation();
 
   useEffect(() => {
     navigation.setOptions({ headerShown: false });
+    // Request location permission and get user location when component mounts
+    requestLocationPermission().then((granted) => {
+      if (granted) getUserLocation();
+    });
   }, [navigation]);
+
+  // Request location permission
+  const requestLocationPermission = async () => {
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationError('Location permission denied. Please enable location services.');
+        return false;
+      }
+      console.log('Location permission granted');
+      return true;
+    } catch (err) {
+      console.error('Permission error:', err);
+      setLocationError('Failed to request location permission.');
+      return false;
+    }
+  };
+
+  // Function to get user's current location
+  const getUserLocation = async () => {
+    setLocationError('');
+    try {
+      let location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        timeout: 15000,
+      });
+      setUserLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+      console.log('User location:', location.coords);
+    } catch (error) {
+      console.error('Geolocation error:', error);
+      setLocationError('Unable to get your location. Please enable location services.');
+    }
+  };
 
   const handleLogin = async () => {
     setError('');
     setAttendanceInfo(null);
-    
+
     if (!email || !password) {
       setError('Please enter both email and password');
       return;
+    }
+
+    // If location is not available, try to get it again
+    if (!userLocation) {
+      const granted = await requestLocationPermission();
+      if (granted) await getUserLocation();
+      // Proceed with login even if location is not available
+      // Backend will mark attendance as absent
     }
 
     setIsLoading(true);
@@ -42,29 +93,38 @@ export default function Login() {
     try {
       const response = await axios.post('http://192.168.1.57:5000/api/admin/login', {
         email,
-        password
+        password,
+        location: userLocation,
       });
 
-      const { token, message, attendanceTime, attendanceDate } = response.data;
+      const { token, message, attendanceTime, attendanceDate, attendanceStatus, location } = response.data;
 
+      // Store token and userId (decoded from JWT or fetched separately)
       await AsyncStorage.setItem('token', token);
-      
+      // Since /api/admin/login doesn't return user.id, decode JWT to get id
+      const decodedToken = JSON.parse(atob(token.split('.')[1]));
+      await AsyncStorage.setItem('userId', decodedToken.id);
+
       // Set attendance information
       if (attendanceTime && attendanceDate) {
-        const isFirstAttendance = message && message.includes('marked successfully');
-        
+        const isFirstAttendance = !message.includes('already marked');
+        const isPresent = attendanceStatus === 'present';
+
         setAttendanceInfo({
           time: attendanceTime,
           date: attendanceDate,
-          message: message || 'Attendance marked successfully',
-          isFirstAttendance: isFirstAttendance
+          message: message || 'Login successful',
+          isFirstAttendance: isFirstAttendance,
+          isPresent: isPresent,
+          distance: location?.distance,
+          isInOffice: location?.isInOffice,
         });
-        
-        // Show attendance message for 2 seconds before redirecting
+
+        // Show attendance message for 3 seconds before redirecting
         setIsLoading(false);
         setTimeout(() => {
           router.replace('/(tabs)/home');
-        }, 2000);
+        }, 3000);
       } else {
         setIsLoading(false);
         router.replace('/(tabs)/home');
@@ -93,34 +153,64 @@ export default function Login() {
           />
           <Text style={styles.appName}>{Colors.Appname}</Text>
         </View>
-        
+
         <View style={styles.formContainer}>
           <Text style={styles.title}>Login</Text>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           {attendanceInfo ? (
-            <View style={[
-              styles.attendanceContainer, 
-              attendanceInfo.isFirstAttendance ? styles.firstAttendance : styles.existingAttendance
-            ]}>
-              <Text style={[
-                styles.attendanceMessage,
-                attendanceInfo.isFirstAttendance ? styles.successText : styles.warningText
-              ]}>
+            <View
+              style={[
+                styles.attendanceContainer,
+                attendanceInfo.isPresent
+                  ? styles.presentAttendance
+                  : styles.absentAttendance,
+                attendanceInfo.isFirstAttendance ? null : styles.existingAttendance,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.attendanceMessage,
+                  attendanceInfo.isPresent ? styles.successText : styles.dangerText,
+                  attendanceInfo.isFirstAttendance ? null : styles.warningText,
+                ]}
+              >
                 {attendanceInfo.message}
               </Text>
-              <Text style={[
-                styles.attendanceText,
-                attendanceInfo.isFirstAttendance ? styles.successText : styles.warningText
-              ]}>
+              <Text
+                style={[
+                  styles.attendanceText,
+                  attendanceInfo.isPresent ? styles.successText : styles.dangerText,
+                  attendanceInfo.isFirstAttendance ? null : styles.warningText,
+                ]}
+              >
                 Date: {attendanceInfo.date}
               </Text>
-              <Text style={[
-                styles.attendanceText,
-                attendanceInfo.isFirstAttendance ? styles.successText : styles.warningText
-              ]}>
+              <Text
+                style={[
+                  styles.attendanceText,
+                  attendanceInfo.isPresent ? styles.successText : styles.dangerText,
+                  attendanceInfo.isFirstAttendance ? null : styles.warningText,
+                ]}
+              >
                 Time: {attendanceInfo.time}
               </Text>
+              {attendanceInfo.distance !== undefined && (
+                <Text
+                  style={[
+                    styles.attendanceText,
+                    attendanceInfo.isPresent
+                      ? styles.successText
+                      : styles.dangerText,
+                    attendanceInfo.isFirstAttendance ? null : styles.warningText,
+                  ]}
+                >
+                  Distance from office: {attendanceInfo.distance}m
+                </Text>
+              )}
             </View>
+          ) : null}
+          {locationError ? (
+            <Text style={styles.locationErrorText}>{locationError}</Text>
           ) : null}
 
           <TextInput
@@ -142,7 +232,7 @@ export default function Login() {
             secureTextEntry
           />
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.loginButton}
             onPress={handleLogin}
             disabled={isLoading}
@@ -234,9 +324,13 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderWidth: 1,
   },
-  firstAttendance: {
+  presentAttendance: {
     backgroundColor: '#e6f7e6',
     borderColor: '#c3e6cb',
+  },
+  absentAttendance: {
+    backgroundColor: '#f8d7da',
+    borderColor: '#f5c6cb',
   },
   existingAttendance: {
     backgroundColor: '#fff3cd',
@@ -251,11 +345,25 @@ const styles = StyleSheet.create({
   attendanceText: {
     fontSize: 14,
     textAlign: 'center',
+    marginBottom: 2,
   },
   successText: {
-    color: '#155724', // Green text for first attendance
+    color: '#155724', // Green text for present attendance
+  },
+  dangerText: {
+    color: '#721c24', // Red text for absent attendance
   },
   warningText: {
     color: '#856404', // Yellow/amber text for existing attendance
+  },
+  locationErrorText: {
+    color: '#721c24',
+    backgroundColor: '#f8d7da',
+    borderColor: '#f5c6cb',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 15,
+    textAlign: 'center',
   },
 });

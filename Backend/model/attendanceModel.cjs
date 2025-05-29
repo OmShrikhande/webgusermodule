@@ -13,6 +13,29 @@ const attendanceSchema = new mongoose.Schema({
     date: { 
         type: String, 
         default: () => new Date().toISOString().split('T')[0] 
+    },
+    status: {
+        type: String,
+        enum: ['present', 'absent'],
+        default: 'absent'
+    },
+    location: {
+        latitude: {
+            type: Number,
+            required: false
+        },
+        longitude: {
+            type: Number,
+            required: false
+        },
+        isInOffice: {
+            type: Boolean,
+            default: false
+        },
+        distance: {
+            type: Number,
+            required: false
+        }
     }
 }, { 
     collection: 'attendance',
