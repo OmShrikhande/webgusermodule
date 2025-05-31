@@ -45,17 +45,45 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       return;
     }
     const location = locations[0];
-    fetch('http://192.168.1.56:5000/api/store-location', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        location: {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
+    const token = await AsyncStorage.getItem('token');
+    
+    try {
+      const response = await fetch('http://192.168.43.211:5000/api/store-location', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
-      }),
-    });
+        body: JSON.stringify({
+          userId,
+          location: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          },
+        }),
+      });
+      
+      const result = await response.json();
+      console.log('Background location result:', result);
+      
+      // Calculate distance for logging
+      const distance = calculateDistance(
+        location.coords.latitude,
+        location.coords.longitude,
+        OFFICE_LOCATION.latitude,
+        OFFICE_LOCATION.longitude
+      );
+      
+      console.log('Background location:', { 
+        userId, 
+        latitude: location.coords.latitude, 
+        longitude: location.coords.longitude,
+        distance: Math.round(distance),
+        isInOffice: result.isInOffice
+      });
+    } catch (err) {
+      console.error('Background location fetch error:', err);
+    }
   }
 });
 
@@ -238,35 +266,47 @@ const Home = () => {
         OFFICE_LOCATION.longitude
       );
 
+      // Get userId and token for logging and API call
+      const userId = await AsyncStorage.getItem('userId');
+      const token = await AsyncStorage.getItem('token');
+      
       // Add logging to verify location data
       console.log('Foreground location:', { userId, latitude, longitude, distance });
-
-      // Send location to backend
-      const token = await AsyncStorage.getItem('token');
-      const userId = await AsyncStorage.getItem('userId');
       if (token && userId) {
-        await axios.post(
-          'http://192.168.1.57:5000/api/store-location',
-          {
-            userId,
-            location: { latitude, longitude },
-          },
-          {
-            headers: { Authorization: `Bearer ${token}` },
+        try {
+          const response = await axios.post(
+            'http://192.168.1.57:5000/api/store-location',
+            {
+              userId,
+              location: { latitude, longitude },
+            },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+          
+          // Get the isInOffice status from the response
+          const { isInOffice, distance: serverDistance } = response.data;
+          
+          console.log('Foreground location sent to backend', { 
+            isInOffice, 
+            distance: serverDistance,
+            clientDistance: Math.round(distance)
+          });
+          
+          // Check for geofence breach based on server response
+          if (!isInOffice) {
+            Alert.alert(
+              'Geofence Alert',
+              `You are ${Math.round(distance)}m away from the office. Please return to the office area.`,
+              [{ text: 'OK' }]
+            );
           }
-        ).then(() => console.log('Foreground location sent to backend'))
-         .catch(err => console.error('Foreground store-location error:', err.message));
+        } catch (err) {
+          console.error('Foreground store-location error:', err.message);
+        }
       } else {
         console.warn('Foreground: Missing token or userId');
-      }
-
-      // Check for geofence breach
-      if (distance > MAX_DISTANCE) {
-        Alert.alert(
-          'Geofence Alert',
-          `You are ${Math.round(distance)}m away from the office. Please return to the office area.`,
-          [{ text: 'OK' }]
-        );
       }
     } catch (error) {
       console.error('Foreground location error:', error);
