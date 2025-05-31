@@ -1,6 +1,6 @@
 import { Colors } from '@/constants/Colors';
 import { router, useNavigation } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -11,10 +11,17 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Animated,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+
+const { width, height } = Dimensions.get('window');
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -24,11 +31,64 @@ export default function Login() {
   const [attendanceInfo, setAttendanceInfo] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const logoRotateAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const navigation = useNavigation();
 
   useEffect(() => {
     navigation.setOptions({ headerShown: false });
+    
+    // Start entrance animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Logo rotation animation
+    Animated.loop(
+      Animated.timing(logoRotateAnim, {
+        toValue: 1,
+        duration: 10000,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    // Pulse animation for loading states
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
     // Request location permission and get user location when component mounts
     requestLocationPermission().then((granted) => {
       if (granted) getUserLocation();
@@ -91,7 +151,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://192.168.1.56:5000/api/admin/login', {
+      const response = await axios.post('http://192.168.43.196:5000/api/admin/login', {
         email,
         password,
         location: userLocation,
@@ -140,230 +200,473 @@ export default function Login() {
     }
   };
 
+  const logoRotate = logoRotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.logoContainer}>
-          <Image
-            source={require('../assets/images/icon.png')}
-            style={styles.logo}
-          />
-          <Text style={styles.appName}>{Colors.Appname}</Text>
-        </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.PRIMARY} />
+      
+      {/* Background Gradient */}
+      <LinearGradient
+        colors={[Colors.PRIMARY, Colors.SECONDARY, Colors.LIGHT]}
+        style={styles.backgroundGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
 
-        <View style={styles.formContainer}>
-          <Text style={styles.title}>Login</Text>
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          {attendanceInfo ? (
-            <View
-              style={[
-                styles.attendanceContainer,
-                attendanceInfo.isPresent
-                  ? styles.presentAttendance
-                  : styles.absentAttendance,
-                attendanceInfo.isFirstAttendance ? null : styles.existingAttendance,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.attendanceMessage,
-                  attendanceInfo.isPresent ? styles.successText : styles.dangerText,
-                  attendanceInfo.isFirstAttendance ? null : styles.warningText,
-                ]}
-              >
-                {attendanceInfo.message}
-              </Text>
-              <Text
-                style={[
-                  styles.attendanceText,
-                  attendanceInfo.isPresent ? styles.successText : styles.dangerText,
-                  attendanceInfo.isFirstAttendance ? null : styles.warningText,
-                ]}
-              >
-                Date: {attendanceInfo.date}
-              </Text>
-              <Text
-                style={[
-                  styles.attendanceText,
-                  attendanceInfo.isPresent ? styles.successText : styles.dangerText,
-                  attendanceInfo.isFirstAttendance ? null : styles.warningText,
-                ]}
-              >
-                Time: {attendanceInfo.time}
-              </Text>
-              {attendanceInfo.distance !== undefined && (
-                <Text
-                  style={[
-                    styles.attendanceText,
-                    attendanceInfo.isPresent
-                      ? styles.successText
-                      : styles.dangerText,
-                    attendanceInfo.isFirstAttendance ? null : styles.warningText,
-                  ]}
-                >
-                  Distance from office: {attendanceInfo.distance}m
-                </Text>
-              )}
-            </View>
-          ) : null}
-          {locationError ? (
-            <Text style={styles.locationErrorText}>{locationError}</Text>
-          ) : null}
+      {/* Floating Circles Animation */}
+      <View style={styles.floatingCircles}>
+        <Animated.View style={[styles.circle, styles.circle1, { transform: [{ scale: pulseAnim }] }]} />
+        <Animated.View style={[styles.circle, styles.circle2, { transform: [{ scale: pulseAnim }] }]} />
+        <Animated.View style={[styles.circle, styles.circle3, { transform: [{ scale: pulseAnim }] }]} />
+      </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#888"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#888"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={handleLogin}
-            disabled={isLoading}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardContainer}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Logo Section */}
+          <Animated.View 
+            style={[
+              styles.logoContainer,
+              {
+                opacity: fadeAnim,
+                transform: [
+                  { translateY: slideAnim },
+                  { scale: scaleAnim }
+                ]
+              }
+            ]}
           >
-            <Text style={styles.loginButtonText}>
-              {isLoading ? 'Logging in...' : 'Login'}
-            </Text>
-          </TouchableOpacity>
+            <Animated.View style={{ transform: [{ rotate: logoRotate }] }}>
+              <Image
+                source={require('../assets/images/icon.png')}
+                style={styles.logo}
+              />
+            </Animated.View>
+            <Text style={styles.appName}>{Colors.Appname}</Text>
+            <Text style={styles.tagline}>Attendance Management System</Text>
+          </Animated.View>
 
-          <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-          </TouchableOpacity>
+          {/* Form Container */}
+          <Animated.View 
+            style={[
+              styles.formContainer,
+              {
+                opacity: fadeAnim,
+                transform: [
+                  { translateY: slideAnim },
+                  { scale: scaleAnim }
+                ]
+              }
+            ]}
+          >
+            <View style={styles.formHeader}>
+              <Text style={styles.title}>Welcome Back</Text>
+              <Text style={styles.subtitle}>Sign in to continue</Text>
+            </View>
 
-          <View style={styles.signupContainer}>
-            <Text style={styles.signupText}>Don't have an account? </Text>
-            <TouchableOpacity>
-              <Text style={styles.signupLink}>Sign Up</Text>
+            {/* Error Display */}
+            {error ? (
+              <Animated.View style={styles.errorContainer}>
+                <Ionicons name="alert-circle" size={20} color="#fff" />
+                <Text style={styles.errorText}>{error}</Text>
+              </Animated.View>
+            ) : null}
+
+            {/* Attendance Info Display */}
+            {attendanceInfo ? (
+              <Animated.View
+                style={[
+                  styles.attendanceContainer,
+                  attendanceInfo.isPresent
+                    ? styles.presentAttendance
+                    : styles.absentAttendance,
+                ]}
+              >
+                <Ionicons 
+                  name={attendanceInfo.isPresent ? "checkmark-circle" : "close-circle"} 
+                  size={24} 
+                  color={attendanceInfo.isPresent ? Colors.SUCCESS : "#F44336"} 
+                />
+                <View style={styles.attendanceInfo}>
+                  <Text style={styles.attendanceMessage}>
+                    {attendanceInfo.message}
+                  </Text>
+                  <Text style={styles.attendanceDetails}>
+                    {attendanceInfo.date} at {attendanceInfo.time}
+                  </Text>
+                  {attendanceInfo.distance !== undefined && (
+                    <Text style={styles.attendanceDetails}>
+                      Distance: {attendanceInfo.distance}m from office
+                    </Text>
+                  )}
+                </View>
+              </Animated.View>
+            ) : null}
+
+            {/* Location Error Display */}
+            {locationError ? (
+              <Animated.View style={styles.locationErrorContainer}>
+                <Ionicons name="location-outline" size={20} color="#FF6B6B" />
+                <Text style={styles.locationErrorText}>{locationError}</Text>
+              </Animated.View>
+            ) : null}
+
+            {/* Email Input */}
+            <View style={styles.inputContainer}>
+              <Ionicons name="mail-outline" size={20} color={Colors.GRAY} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email Address"
+                placeholderTextColor={Colors.GRAY}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+              />
+            </View>
+
+            {/* Password Input */}
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-closed-outline" size={20} color={Colors.GRAY} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor={Colors.GRAY}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoComplete="password"
+              />
+              <TouchableOpacity
+                style={styles.eyeIcon}
+                onPress={() => setShowPassword(!showPassword)}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-outline" : "eye-off-outline"} 
+                  size={20} 
+                  color={Colors.GRAY} 
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Login Button */}
+            <TouchableOpacity
+              style={[styles.loginButton, isLoading && styles.loginButtonLoading]}
+              onPress={handleLogin}
+              disabled={isLoading}
+            >
+              <LinearGradient
+                colors={isLoading ? [Colors.GRAY, Colors.GRAY] : [Colors.SECONDARY, Colors.PRIMARY]}
+                style={styles.loginButtonGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                {isLoading ? (
+                  <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                    <Ionicons name="hourglass-outline" size={20} color="#fff" />
+                  </Animated.View>
+                ) : (
+                  <Ionicons name="log-in-outline" size={20} color="#fff" />
+                )}
+                <Text style={styles.loginButtonText}>
+                  {isLoading ? 'Signing In...' : 'Sign In'}
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+            {/* Forgot Password */}
+            <TouchableOpacity style={styles.forgotPassword}>
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
+
+            {/* Sign Up Link */}
+            <View style={styles.signupContainer}>
+              <Text style={styles.signupText}>Don't have an account? </Text>
+              <TouchableOpacity>
+                <Text style={styles.signupLink}>Sign Up</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+
+          {/* Footer */}
+          <Animated.View 
+            style={[
+              styles.footer,
+              { opacity: fadeAnim }
+            ]}
+          >
+            <Text style={styles.footerText}>© 2024 {Colors.Appname}</Text>
+            <Text style={styles.footerSubtext}>Secure • Reliable • Efficient</Text>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  scrollContainer: { flexGrow: 1, justifyContent: 'center', padding: 20 },
-  logoContainer: { alignItems: 'center', marginBottom: 40 },
-  logo: { width: 100, height: 100, borderRadius: 15 },
+  container: {
+    flex: 1,
+  },
+  backgroundGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  floatingCircles: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+  },
+  circle: {
+    position: 'absolute',
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  circle1: {
+    width: 100,
+    height: 100,
+    top: '10%',
+    left: '10%',
+  },
+  circle2: {
+    width: 150,
+    height: 150,
+    top: '60%',
+    right: '10%',
+  },
+  circle3: {
+    width: 80,
+    height: 80,
+    top: '30%',
+    right: '20%',
+  },
+  keyboardContainer: {
+    flex: 1,
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 20,
+    paddingTop: 60,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    borderRadius: 25,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
   appName: {
-    fontSize: 28,
-    fontFamily: 'flux-bold',
-    color: Colors.SECONDARY,
-    marginTop: 10,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: Colors.WHITE,
+    marginBottom: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  tagline: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
   },
   formContainer: {
-    width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 25,
+    padding: 30,
+    marginHorizontal: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.2,
+    shadowRadius: 25,
+    elevation: 15,
+    backdropFilter: 'blur(10px)',
+  },
+  formHeader: {
+    alignItems: 'center',
+    marginBottom: 30,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
     color: Colors.PRIMARY,
+    marginBottom: 5,
   },
-  input: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 15,
+  subtitle: {
     fontSize: 16,
+    color: Colors.GRAY,
   },
-  loginButton: {
-    backgroundColor: Colors.PRIMARY,
-    borderRadius: 8,
-    padding: 15,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  loginButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  forgotPassword: { alignItems: 'center', marginTop: 15 },
-  forgotPasswordText: { color: Colors.PRIMARY, fontSize: 14 },
-  signupContainer: {
+  errorContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
+    alignItems: 'center',
+    backgroundColor: '#FF6B6B',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
   },
-  signupText: { color: '#666', fontSize: 14 },
-  signupLink: { color: Colors.PRIMARY, fontSize: 14, fontWeight: 'bold' },
   errorText: {
-    color: 'red',
-    marginBottom: 15,
-    textAlign: 'center',
+    color: '#fff',
+    marginLeft: 10,
+    flex: 1,
+    fontSize: 14,
   },
   attendanceContainer: {
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 15,
-    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
   presentAttendance: {
-    backgroundColor: '#e6f7e6',
-    borderColor: '#c3e6cb',
+    backgroundColor: '#E8F5E8',
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.SUCCESS,
   },
   absentAttendance: {
-    backgroundColor: '#f8d7da',
-    borderColor: '#f5c6cb',
+    backgroundColor: '#FFF0F0',
+    borderLeftWidth: 4,
+    borderLeftColor: '#F44336',
   },
-  existingAttendance: {
-    backgroundColor: '#fff3cd',
-    borderColor: '#ffeeba',
+  attendanceInfo: {
+    marginLeft: 15,
+    flex: 1,
   },
   attendanceMessage: {
     fontSize: 16,
     fontWeight: 'bold',
-    textAlign: 'center',
+    color: Colors.PRIMARY,
     marginBottom: 5,
   },
-  attendanceText: {
+  attendanceDetails: {
     fontSize: 14,
-    textAlign: 'center',
+    color: Colors.GRAY,
     marginBottom: 2,
   },
-  successText: {
-    color: '#155724', // Green text for present attendance
-  },
-  dangerText: {
-    color: '#721c24', // Red text for absent attendance
-  },
-  warningText: {
-    color: '#856404', // Yellow/amber text for existing attendance
+  locationErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF0F0',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B6B',
   },
   locationErrorText: {
-    color: '#721c24',
-    backgroundColor: '#f8d7da',
-    borderColor: '#f5c6cb',
+    color: '#FF6B6B',
+    marginLeft: 10,
+    flex: 1,
+    fontSize: 14,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 15,
+    marginBottom: 20,
+    paddingHorizontal: 15,
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 15,
-    textAlign: 'center',
+    borderColor: '#E9ECEF',
+  },
+  inputIcon: {
+    marginRight: 15,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 18,
+    fontSize: 16,
+    color: Colors.PRIMARY,
+  },
+  eyeIcon: {
+    padding: 5,
+  },
+  loginButton: {
+    borderRadius: 15,
+    marginTop: 10,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    elevation: 8,
+  },
+  loginButtonLoading: {
+    opacity: 0.7,
+  },
+  loginButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    borderRadius: 15,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  forgotPassword: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  forgotPasswordText: {
+    color: Colors.SECONDARY,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  signupContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  signupText: {
+    color: Colors.GRAY,
+    fontSize: 16,
+  },
+  signupLink: {
+    color: Colors.SECONDARY,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 30,
+    paddingBottom: 20,
+  },
+  footerText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    marginBottom: 5,
+  },
+  footerSubtext: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 12,
   },
 });

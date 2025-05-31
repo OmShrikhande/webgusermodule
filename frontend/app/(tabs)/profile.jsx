@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const Profile = () => {
   const navigation = useNavigation();
@@ -48,10 +49,19 @@ const Profile = () => {
         },
         {
           text: 'Logout',
-          onPress: () => {
-            // Perform logout actions here (clear tokens, etc.)
-            // Then navigate to login screen
-            router.replace('/login');
+          onPress: async () => {
+            try {
+              // Clear stored tokens and user data
+              await AsyncStorage.removeItem('token');
+              await AsyncStorage.removeItem('userId');
+              
+              // Navigate to login screen
+              router.replace('/login');
+            } catch (error) {
+              console.error('Error during logout:', error);
+              // Still navigate to login even if clearing storage fails
+              router.replace('/login');
+            }
           },
           style: 'destructive',
         },
