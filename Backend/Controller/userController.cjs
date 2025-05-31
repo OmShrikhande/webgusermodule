@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../model/usermodel.cjs');
 const Attendance = require('../model/attendanceModel.cjs');
-const { isWithinOfficeRange } = require('../utils/locationUtils.cjs');
+const { isWithinOfficeRange, calculateDistance } = require('../utils/locationUtils.cjs');
 const { officeLocation, maxAllowedDistance, enforceLocationCheck } = require('../config/locationConfig.cjs');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
@@ -45,12 +45,11 @@ exports.loginUser = async (req, res) => {
     if (location && location.latitude && location.longitude) {
       // Calculate distance from office
       distance = Math.round(
-        isWithinOfficeRange(
+        calculateDistance(
           location.latitude,
           location.longitude,
           officeLocation.latitude,
-          officeLocation.longitude,
-          Infinity // Pass Infinity to just calculate distance without checking range
+          officeLocation.longitude
         )
       );
 
@@ -173,12 +172,11 @@ exports.login = async (req, res) => {
     if (location && location.latitude && location.longitude) {
       // Calculate distance from office
       distance = Math.round(
-        isWithinOfficeRange(
+        calculateDistance(
           location.latitude,
           location.longitude,
           officeLocation.latitude,
-          officeLocation.longitude,
-          Infinity // Pass Infinity to just calculate distance without checking range
+          officeLocation.longitude
         )
       );
 

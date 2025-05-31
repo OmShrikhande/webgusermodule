@@ -223,12 +223,16 @@ router.post('/store-location', async (req, res) => {
       )
     );
 
+    // Check if user is within office range
+    const isInOffice = distance <= maxAllowedDistance;
+    
     // Save location
-    console.log('Saving location:', { userId, latitude, longitude, distance });
+    console.log('Saving location:', { userId, latitude, longitude, distance, isInOffice });
     const locationEntry = new Location({
       userId,
       location: { latitude, longitude },
       distance,
+      isInOffice,
     });
     await locationEntry.save();
     console.log('Location saved successfully');
@@ -236,6 +240,8 @@ router.post('/store-location', async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Location stored successfully',
+      isInOffice,
+      distance,
     });
   } catch (error) {
     console.error('Store location error:', error);

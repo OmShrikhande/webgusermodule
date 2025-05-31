@@ -13,6 +13,7 @@ const locationSchema = new mongoose.Schema({
   },
   timestamp: { type: Date, default: Date.now },
   distance: { type: Number },
+  isInOffice: { type: Boolean, default: false },
 }, {
   collection: 'locations',
   timestamps: true,
