@@ -81,6 +81,37 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
         distance: Math.round(distance),
         isInOffice: result.isInOffice
       });
+      
+      // Check if user was previously in office
+      const wasInOfficeStr = await AsyncStorage.getItem('wasInOffice');
+      const wasInOffice = wasInOfficeStr ? wasInOfficeStr === 'true' : true; // Default to true if not set
+      
+      // If user just left the office, save an alert
+      if (!result.isInOffice && wasInOffice) {
+        try {
+          // Call the alert-out-of-range endpoint to save the alert
+          await fetch('http://192.168.43.211:5000/api/alert-out-of-range', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              userId,
+              location: {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+              },
+            }),
+          });
+          console.log('Background geofence crossing alert saved to database');
+        } catch (alertErr) {
+          console.error('Failed to save background geofence alert:', alertErr);
+        }
+      }
+      
+      // Update the wasInOffice state for next check
+      await AsyncStorage.setItem('wasInOffice', result.isInOffice.toString());
     } catch (err) {
       console.error('Background location fetch error:', err);
     }
@@ -88,6 +119,9 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 });
 
 const Home = () => {
+  // Add state to track if user was previously in office
+  const [wasInOffice, setWasInOffice] = useState(true);
+  
   const [userData, setUserData] = useState({
     name: 'John Doe',
     role: 'Software Developer',
@@ -217,6 +251,9 @@ const Home = () => {
     // Request background location permissions
     const startLocationTracking = async () => {
       try {
+        // Initialize wasInOffice in AsyncStorage (default to true)
+        await AsyncStorage.setItem('wasInOffice', 'true');
+        
         let { status } = await Location.requestBackgroundPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert(
@@ -301,7 +338,30 @@ const Home = () => {
               `You are ${Math.round(distance)}m away from the office. Please return to the office area.`,
               [{ text: 'OK' }]
             );
+            
+            // Only save alert if user just crossed the boundary (was in office before)
+            if (wasInOffice) {
+              try {
+                // Call the alert-out-of-range endpoint to save the alert
+                await axios.post(
+                  'http://192.168.1.57:5000/api/alert-out-of-range',
+                  {
+                    userId,
+                    location: { latitude, longitude },
+                  },
+                  {
+                    headers: { Authorization: `Bearer ${token}` },
+                  }
+                );
+                console.log('Geofence crossing alert saved to database');
+              } catch (alertErr) {
+                console.error('Failed to save geofence alert:', alertErr);
+              }
+            }
           }
+          
+          // Update the wasInOffice state for next check
+          setWasInOffice(isInOffice);
         } catch (err) {
           console.error('Foreground store-location error:', err.message);
         }
