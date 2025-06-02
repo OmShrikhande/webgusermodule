@@ -3,6 +3,7 @@ const router = express.Router();
 const authController = require('../Controller/userController.cjs');
 const User = require('../model/usermodel.cjs');
 const Alert = require('../model/alertModel.cjs');
+const Notification = require('../model/notificationModel.cjs');
 const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const { calculateDistance, isWithinOfficeRange } = require('../utils/locationUtils.cjs');
@@ -161,24 +162,33 @@ router.post('/alert-out-of-range', async (req, res) => {
         });
         await alert.save();
 
-        // Find admin
+        // Create notification for the user
+        const userNotification = new Notification({
+            userId,
+            message: `You are ${distance}m away from the office. Please return to the office area.`,
+            alertId: alert._id
+        });
+        await userNotification.save();
+
+        // Find admin to create admin notification
         const admin = await User.findOne({ role: 'admin' });
         if (!admin) {
             console.warn('No admin found for notification');
         } else {
-            // Send email to admin
-            const mailOptions = {
-                from: process.env.EMAIL_USER,
-                to: admin.email,
-                subject: 'Geofence Alert: User Out of Range',
-                text: `User ${user.email} has moved ${distance}m away from the office at ${new Date().toLocaleString()}. Location: (${location.latitude}, ${location.longitude}).`
-            };
-            await transporter.sendMail(mailOptions);
+            // Create notification for admin
+            const adminNotification = new Notification({
+                userId: admin._id,
+                message: `User ${user.email} has moved ${distance}m away from the office at ${new Date().toLocaleString()}.`,
+                alertId: alert._id
+            });
+            await adminNotification.save();
         }
 
         res.status(200).json({
             success: true,
-            message: 'Alert processed and notifications sent'
+            message: 'Alert processed and notifications sent',
+            alert: alert._id,
+            notification: userNotification._id
         });
     } catch (error) {
         console.error('Alert error:', error);
