@@ -10,6 +10,10 @@ const attendanceSchema = new mongoose.Schema({
         type: Date, 
         default: Date.now 
     },
+    logoutTime: { 
+        type: Date, 
+        default: null 
+    },
     date: { 
         type: String, 
         default: () => new Date().toISOString().split('T')[0] 

@@ -10,6 +10,12 @@ import NotificationPopup from '../../components/NotificationPopup';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { useFocusEffect } from 'expo-router';
+import UserHeader from '../../components/home/UserHeader';
+import AttendanceCard from '../../components/home/AttendanceCard';
+import QuickStats from '../../components/home/QuickStats';
+import UpcomingDeadlines from '../../components/home/UpcomingDeadlines';
+import AssignedTasks from '../../components/home/AssignedTasks';
+import RecentActivity from '../../components/home/RecentActivity';
 
 const LOCATION_TASK_NAME = 'background-location-task';
 const OFFICE_LOCATION = {
@@ -49,7 +55,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       return;
     }
     const location = locations[0];
-    fetch('http://192.168.137.1:5000/api/store-location', {
+    fetch('http://192.168.1.6:5000/api/store-location', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -202,7 +208,7 @@ const Home = () => {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
 
-      const response = await axios.get('http://192.168.137.1:5000/api/profile', {
+      const response = await axios.get('http://192.168.1.6:5000/api/profile', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -310,7 +316,7 @@ const Home = () => {
       if (token && userId) {
         try {
           const response = await axios.post(
-            'http://192.168.137.1:5000/api/store-location',
+            'http://192.168.1.6:5000/api/store-location',
             {
               userId,
               location: { latitude, longitude },
@@ -342,7 +348,7 @@ const Home = () => {
               try {
                 // Call the alert-out-of-range endpoint to save the alert
                 await axios.post(
-                  'http://192.168.137.1:5000/api/alert-out-of-range',
+                  'http://192.168.1.6:5000/api/alert-out-of-range',
                   {
                     userId,
                     location: { latitude, longitude },
@@ -432,7 +438,7 @@ const Home = () => {
     
     // If it's a relative path, prepend the server URL
     if (profileImage.startsWith('/uploads/')) {
-      return `http://192.168.137.1:5000${profileImage}`;
+      return `http://192.168.1.6:5000${profileImage}`;
     }
     
     return profileImage;
@@ -457,7 +463,6 @@ const Home = () => {
         message={alertMessage}
         distance={alertDistance}
       />
-      
       <ScrollView 
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -474,53 +479,16 @@ const Home = () => {
             }
           ]}
         >
-          <LinearGradient
-            colors={[Colors.PRIMARY, Colors.SECONDARY]}
-            style={styles.headerGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View style={styles.userInfo}>
-              <View style={styles.avatarContainer}>
-                {userData.profileImage ? (
-                  <Image 
-                    source={{ uri: getImageUri(userData.profileImage) }} 
-                    style={styles.avatar}
-                    onError={(error) => {
-                      console.log('Image load error:', error);
-                    }}
-                  />
-                ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>
-                      {getInitials(userData.name, userData.email)}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.userDetails}>
-                <Text style={styles.userName}>Welcome, {userData.name || 'User'}</Text>
-                <Text style={styles.userRole}>{userData.role || 'Employee'}</Text>
-                <View style={styles.statusContainer}>
-                  <View
-                    style={[
-                      styles.statusIndicator,
-                      { backgroundColor: latestAttendance?.status === 'present' ? '#4CAF50' : '#F44336' },
-                    ]}
-                  />
-                  <Text style={styles.statusText}>
-                    {latestAttendance?.status === 'present' ? 'Present' : 'Absent'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <TouchableOpacity style={styles.notificationButton}>
-              <Ionicons name="notifications" size={24} color="rgba(255,255,255,0.9)" />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationCount}>3</Text>
-              </View>
-            </TouchableOpacity>
-          </LinearGradient>
+          <UserHeader
+            userData={userData}
+            latestAttendance={latestAttendance}
+            fadeAnim={fadeAnim}
+            slideAnim={slideAnim}
+            getImageUri={getImageUri}
+            getInitials={getInitials}
+            Colors={Colors}
+            styles={styles}
+          />
         </Animated.View>
 
         {/* Attendance Times Card */}
@@ -534,60 +502,19 @@ const Home = () => {
               }
             ]}
           >
-            <LinearGradient
-              colors={['#E8F5E8', '#F0F8F0']}
-              style={styles.attendanceGradient}
-            >
-              <View style={styles.attendanceHeader}>
-                <Ionicons name="time" size={24} color={Colors.PRIMARY} />
-                <Text style={styles.attendanceTitle}>Today's Activity</Text>
-              </View>
-              
-              <View style={styles.attendanceRow}>
-                <View style={styles.attendanceItem}>
-                  <Ionicons name="log-in" size={20} color="#4CAF50" />
-                  <Text style={styles.attendanceLabel}>Login</Text>
-                  <Text style={styles.attendanceTime}>
-                    {formatTime(latestAttendance.loginTime)}
-                  </Text>
-                </View>
-                
-                <View style={styles.attendanceDivider} />
-                
-                <View style={styles.attendanceItem}>
-                  <Ionicons 
-                    name="log-out" 
-                    size={20} 
-                    color={latestAttendance.logoutTime ? "#FF6B6B" : "#999"} 
-                  />
-                  <Text style={styles.attendanceLabel}>Logout</Text>
-                  <Text style={[
-                    styles.attendanceTime,
-                    !latestAttendance.logoutTime && styles.attendanceTimeInactive
-                  ]}>
-                    {latestAttendance.logoutTime ? formatTime(latestAttendance.logoutTime) : 'Active'}
-                  </Text>
-                </View>
-              </View>
-            </LinearGradient>
+            <AttendanceCard
+              latestAttendance={latestAttendance}
+              fadeAnim={fadeAnim}
+              slideAnim={slideAnim}
+              formatTime={formatTime}
+              Colors={Colors}
+              styles={styles}
+            />
           </Animated.View>
         )}
 
         {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{userData.tasks}</Text>
-            <Text style={styles.statLabel}>Tasks</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{userData.completedTasks}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{deadlines.length}</Text>
-            <Text style={styles.statLabel}>Deadlines</Text>
-          </View>
-        </View>
+        <QuickStats userData={userData} deadlines={deadlines} styles={styles} />
 
         {/* Navigation Options */}
         <View style={styles.navigationContainer}>
@@ -610,136 +537,13 @@ const Home = () => {
         </View>
 
         {/* Upcoming Deadlines */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Upcoming Deadlines</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
-          {deadlines.map((deadline) => (
-            <View key={deadline.id} style={styles.deadlineItem}>
-              <View style={styles.deadlineInfo}>
-                <Text style={styles.deadlineTitle}>{deadline.title}</Text>
-                <Text style={styles.deadlineDate}>Due: {deadline.date}</Text>
-              </View>
-              <View
-                style={[
-                  styles.priorityBadge,
-                  { backgroundColor: getPriorityColor(deadline.priority) },
-                ]}
-              >
-                <Text style={styles.priorityText}>{deadline.priority}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
+        <UpcomingDeadlines deadlines={deadlines} styles={styles} getPriorityColor={getPriorityColor} />
 
         {/* Assigned Tasks */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Assigned Tasks</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
-          {tasks.map((task) => (
-            <View key={task.id} style={styles.taskItem}>
-              <View style={styles.taskInfo}>
-                <Text style={styles.taskTitle}>{task.title}</Text>
-                <Text style={styles.taskAssignee}>
-                  Assigned to: {task.assignedTo}
-                </Text>
-                <Text style={styles.taskDueDate}>Due: {task.dueDate}</Text>
-              </View>
-              <View style={styles.taskStatusContainer}>
-                <Text style={styles.taskStatus}>{task.status}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
+        <AssignedTasks tasks={tasks} styles={styles} />
 
-        {/* Team Status */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Team Status</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.teamContainer}
-          >
-            {teamData.map((member) => (
-              <View key={member.id} style={styles.teamMember}>
-                <Image
-                  source={{ uri: member.avatar }}
-                  style={styles.teamMemberAvatar}
-                />
-                <Text style={styles.teamMemberName}>{member.name}</Text>
-                <View
-                  style={[
-                    styles.teamMemberStatus,
-                    { backgroundColor: getStatusColor(member.status) },
-                  ]}
-                >
-                  <Text style={styles.teamMemberStatusText}>{member.status}</Text>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Product Showcase */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Products</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.productsContainer}
-          >
-            {products.map((product) => (
-              <TouchableOpacity key={product.id} style={styles.productCard}>
-                <Image
-                  source={{ uri: product.image }}
-                  style={styles.productImage}
-                />
-                <Text style={styles.productName}>{product.name}</Text>
-                <Text style={styles.productStatus}>{product.status}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Timeline / Activity Feed */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>See All</Text>
-            </TouchableOpacity>
-          </View>
-          {timeline.map((activity) => (
-            <View key={activity.id} style={styles.timelineItem}>
-              <View style={styles.timelineDot} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineText}>
-                  <Text style={styles.timelineUser}>{activity.user}</Text>{' '}
-                  {activity.action}{' '}
-                  <Text style={styles.timelineItem}>{activity.item}</Text>
-                </Text>
-                <Text style={styles.timelineTime}>{activity.time}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
+        {/* Recent Activity */}
+        <RecentActivity timeline={timeline} styles={styles} />
       </ScrollView>
     </SafeAreaView>
   );

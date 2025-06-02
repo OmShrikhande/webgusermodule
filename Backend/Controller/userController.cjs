@@ -1,5 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const path = require('path');
 const User = require('../model/usermodel.cjs');
 const Attendance = require('../model/attendanceModel.cjs');
 const { isWithinOfficeRange, calculateDistance } = require('../utils/locationUtils.cjs');
@@ -103,6 +105,9 @@ exports.loginUser = async (req, res) => {
       distance = existingAttendance.location?.distance;
     }
 
+    // Update user's last login time
+    await User.findByIdAndUpdate(user._id, { lastLoginTime: now });
+
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1h' });
 
     res.json({
@@ -118,6 +123,9 @@ exports.loginUser = async (req, res) => {
       user: {
         id: user._id.toString(),
         email: user.email,
+        name: user.name,
+        profileImage: user.profileImage,
+        lastLoginTime: now,
       },
     });
   } catch (err) {
@@ -230,6 +238,9 @@ exports.login = async (req, res) => {
       distance = existingAttendance.location?.distance;
     }
 
+    // Update user's last login time
+    await User.findByIdAndUpdate(user._id, { lastLoginTime: now });
+
     const token = jwt.sign(
       { userId: user._id, email: user.email },
       JWT_SECRET,
@@ -242,6 +253,9 @@ exports.login = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
+        name: user.name,
+        profileImage: user.profileImage,
+        lastLoginTime: now,
       },
       attendance: {
         time: attendanceTime,
@@ -262,4 +276,184 @@ exports.login = async (req, res) => {
   }
 };
 
-module.exports = { login: exports.login, loginUser: exports.loginUser };
+// Get user profile
+exports.getUserProfile = async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.userId;
+    const user = await User.findById(userId).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Get latest attendance record
+    const latestAttendance = await Attendance.findOne({ userId })
+      .sort({ date: -1, loginTime: -1 });
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name || '',
+        profileImage: user.profileImage || '',
+        joinDate: user.joinDate,
+        lastLoginTime: user.lastLoginTime,
+        lastLogoutTime: user.lastLogoutTime,
+        role: user.role
+      },
+      latestAttendance: latestAttendance ? {
+        loginTime: latestAttendance.loginTime,
+        logoutTime: latestAttendance.logoutTime,
+        date: latestAttendance.date,
+        status: latestAttendance.status
+      } : null
+    });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Helper function to save base64 image to file
+const saveBase64Image = (base64Data, userId) => {
+  try {
+    // Remove data URL prefix if present
+    const base64Image = base64Data.replace(/^data:image\/[a-z]+;base64,/, '');
+    
+    // Create uploads directory if it doesn't exist
+    const uploadsDir = path.join(__dirname, '../uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    // Generate unique filename
+    const filename = `profile_${userId}_${Date.now()}.jpg`;
+    const filepath = path.join(uploadsDir, filename);
+
+    // Save file
+    fs.writeFileSync(filepath, base64Image, 'base64');
+    
+    return `/uploads/${filename}`;
+  } catch (error) {
+    console.error('Error saving image file:', error);
+    return null;
+  }
+};
+
+// Update user profile
+exports.updateUserProfile = async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.userId;
+    const { name, profileImage } = req.body;
+
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    
+    if (profileImage !== undefined) {
+      // Check image size (base64 string length)
+      const imageSizeKB = (profileImage.length * 0.75) / 1024;
+      console.log(`Received image size: ${imageSizeKB.toFixed(2)} KB`);
+      
+      if (imageSizeKB > 2000) { // 2MB limit
+        return res.status(413).json({ 
+          success: false,
+          message: 'Image too large. Please select a smaller image (max 2MB).' 
+        });
+      }
+
+      // Option 1: Save as file (recommended for larger images)
+      const imageUrl = saveBase64Image(profileImage, userId);
+      if (imageUrl) {
+        updateData.profileImage = imageUrl;
+      } else {
+        // Option 2: Store in database (fallback for smaller images)
+        if (imageSizeKB < 500) { // Only store in DB if less than 500KB
+          updateData.profileImage = profileImage;
+        } else {
+          return res.status(500).json({ 
+            success: false,
+            message: 'Failed to save image. Please try a smaller image.' 
+          });
+        }
+      }
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      updateData,
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        profileImage: user.profileImage,
+        joinDate: user.joinDate,
+        lastLoginTime: user.lastLoginTime,
+        lastLogoutTime: user.lastLogoutTime,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    
+    // Handle specific MongoDB errors
+    if (error.name === 'DocumentTooLarge' || error.code === 2) {
+      return res.status(413).json({ 
+        success: false,
+        message: 'Image too large for database. Please select a smaller image.' 
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while updating profile' 
+    });
+  }
+};
+
+// Handle logout
+exports.logoutUser = async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.userId;
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+
+    // Update user's last logout time
+    await User.findByIdAndUpdate(userId, { lastLogoutTime: now });
+
+    // Update today's attendance record with logout time
+    await Attendance.findOneAndUpdate(
+      { userId, date: today },
+      { logoutTime: now },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'Logged out successfully',
+      logoutTime: now.toLocaleTimeString(),
+      logoutDate: now.toLocaleDateString()
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+module.exports = { 
+  login: exports.login, 
+  loginUser: exports.loginUser,
+  getUserProfile: exports.getUserProfile,
+  updateUserProfile: exports.updateUserProfile,
+  logoutUser: exports.logoutUser
+};

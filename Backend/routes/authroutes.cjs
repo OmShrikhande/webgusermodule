@@ -9,6 +9,7 @@ const nodemailer = require('nodemailer');
 const { calculateDistance, isWithinOfficeRange } = require('../utils/locationUtils.cjs');
 const { officeLocation, maxAllowedDistance } = require('../config/locationConfig.cjs');
 const Location = require('../model/locationModel.cjs');
+const { authenticateToken } = require('../middleware/auth.cjs');
 // Configure Nodemailer transporter
 const transporter = nodemailer.createTransport({
     service: 'gmail', // Use your SMTP service
@@ -262,4 +263,10 @@ router.post('/store-location', async (req, res) => {
     });
   }
 });
+
+// Profile management routes
+router.get('/profile', authenticateToken, authController.getUserProfile);
+router.put('/profile', authenticateToken, authController.updateUserProfile);
+router.post('/logout', authenticateToken, authController.logoutUser);
+
 module.exports = router;

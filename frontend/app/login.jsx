@@ -134,7 +134,7 @@ export default function Login() {
   const checkUserProfile = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const response = await axios.get('http://192.168.137.1:5000/api/profile', {
+      const response = await axios.get('http://192.168.1.6:5000/api/profile', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -186,7 +186,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://192.168.137.1:5000/api/admin/login', {
+      const response = await axios.post('http://192.168.1.6:5000/api/admin/login', {
         email,
         password,
         location: userLocation,
