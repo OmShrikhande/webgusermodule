@@ -6,6 +6,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import NotificationPopup from '../../components/NotificationPopup';
 
 const LOCATION_TASK_NAME = 'background-location-task';
 const OFFICE_LOCATION = {
@@ -45,7 +46,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       return;
     }
     const location = locations[0];
-    fetch('http://192.168.1.56:5001/api/store-location', {
+    fetch('http://192.168.1.56:5000/api/store-location', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -62,6 +63,9 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
 const Home = () => {
   // Add state to track if user was previously in office
   const [wasInOffice, setWasInOffice] = useState(true);
+  const [notificationVisible, setNotificationVisible] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertDistance, setAlertDistance] = useState(null);
   
   const [userData, setUserData] = useState({
     name: 'John Doe',
@@ -253,7 +257,7 @@ const Home = () => {
       if (token && userId) {
         try {
           const response = await axios.post(
-            'http://192.168.1.57:5000/api/store-location',
+            'http://192.168.1.58:5000/api/store-location',
             {
               userId,
               location: { latitude, longitude },
@@ -274,18 +278,18 @@ const Home = () => {
           
           // Check for geofence breach based on server response
           if (!isInOffice) {
-            Alert.alert(
-              'Geofence Alert',
-              `You are ${Math.round(distance)}m away from the office. Please return to the office area.`,
-              [{ text: 'OK' }]
-            );
+            // Set alert message and distance for the notification popup
+            const message = `You are ${Math.round(distance)}m away from the office. Please return to the office area.`;
+            setAlertMessage(message);
+            setAlertDistance(Math.round(distance));
+            setNotificationVisible(true);
             
             // Only save alert if user just crossed the boundary (was in office before)
             if (wasInOffice) {
               try {
                 // Call the alert-out-of-range endpoint to save the alert
                 await axios.post(
-                  'http://192.168.1.57:5000/api/alert-out-of-range',
+                  'http://192.168.1.58:5000/api/alert-out-of-range',
                   {
                     userId,
                     location: { latitude, longitude },
@@ -347,6 +351,14 @@ const Home = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Notification Popup */}
+      <NotificationPopup
+        visible={notificationVisible}
+        onClose={() => setNotificationVisible(false)}
+        message={alertMessage}
+        distance={alertDistance}
+      />
+      
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header with user info */}
         <View style={styles.header}>
