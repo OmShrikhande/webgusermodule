@@ -1,12 +1,15 @@
+import React, { useState, useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useEffect } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert, Animated, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import NotificationPopup from '../../components/NotificationPopup';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Colors } from '@/constants/Colors';
+import { useFocusEffect } from 'expo-router';
 
 const LOCATION_TASK_NAME = 'background-location-task';
 const OFFICE_LOCATION = {
@@ -46,7 +49,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       return;
     }
     const location = locations[0];
-    fetch('http://192.168.1.56:5000/api/store-location', {
+    fetch('http://192.168.137.1:5000/api/store-location', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -60,22 +63,23 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   }
 });
 
+const { width } = Dimensions.get('window');
+
 const Home = () => {
   // Add state to track if user was previously in office
   const [wasInOffice, setWasInOffice] = useState(true);
   const [notificationVisible, setNotificationVisible] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
   const [alertDistance, setAlertDistance] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   
-  const [userData, setUserData] = useState({
-    name: 'John Doe',
-    role: 'Software Developer',
-    status: 'Present',
-    avatar: 'https://randomuser.me/api/portraits/men/32.jpg',
-    notifications: 5,
-    tasks: 8,
-    completedTasks: 3,
-  });
+  // Real user data from backend
+  const [userData, setUserData] = useState(null);
+  const [latestAttendance, setLatestAttendance] = useState(null);
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
 
   const [teamData, setTeamData] = useState([
     {
@@ -192,6 +196,55 @@ const Home = () => {
     },
   ]);
 
+  // Fetch user profile data
+  const fetchUserProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await axios.get('http://192.168.137.1:5000/api/profile', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success) {
+        setUserData(response.data.user);
+        setLatestAttendance(response.data.latestAttendance);
+      }
+    } catch (error) {
+      console.error('Profile fetch error:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Focus effect to refresh data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchUserProfile();
+      
+      // Start entrance animations
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, [])
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchUserProfile();
+  };
+
   useEffect(() => {
     // Request background location permissions
     const startLocationTracking = async () => {
@@ -257,7 +310,7 @@ const Home = () => {
       if (token && userId) {
         try {
           const response = await axios.post(
-            'http://192.168.1.58:5000/api/store-location',
+            'http://192.168.137.1:5000/api/store-location',
             {
               userId,
               location: { latitude, longitude },
@@ -289,7 +342,7 @@ const Home = () => {
               try {
                 // Call the alert-out-of-range endpoint to save the alert
                 await axios.post(
-                  'http://192.168.1.58:5000/api/alert-out-of-range',
+                  'http://192.168.137.1:5000/api/alert-out-of-range',
                   {
                     userId,
                     location: { latitude, longitude },
@@ -349,6 +402,52 @@ const Home = () => {
     }
   };
 
+  const formatTime = (dateString) => {
+    if (!dateString) return 'Not available';
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const getInitials = (name, email) => {
+    if (name && name.trim()) {
+      return name.trim().charAt(0).toUpperCase();
+    }
+    if (email) {
+      return email.charAt(0).toUpperCase();
+    }
+    return 'U';
+  };
+
+  const getImageUri = (profileImage) => {
+    if (!profileImage) return null;
+    
+    // If it's already a full URL or base64, return as is
+    if (profileImage.startsWith('http') || profileImage.startsWith('data:')) {
+      return profileImage;
+    }
+    
+    // If it's a relative path, prepend the server URL
+    if (profileImage.startsWith('/uploads/')) {
+      return `http://192.168.137.1:5000${profileImage}`;
+    }
+    
+    return profileImage;
+  };
+
+  if (!userData) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Notification Popup */}
@@ -359,36 +458,120 @@ const Home = () => {
         distance={alertDistance}
       />
       
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header with user info */}
-        <View style={styles.header}>
-          <View style={styles.userInfo}>
-            <Image source={{ uri: userData.avatar }} style={styles.avatar} />
-            <View>
-              <Text style={styles.userName}>Welcome, {userData.name}</Text>
-              <Text style={styles.userRole}>{userData.role}</Text>
-              <View style={styles.statusContainer}>
-                <View
-                  style={[
-                    styles.statusIndicator,
-                    { backgroundColor: getStatusColor(userData.status) },
-                  ]}
-                />
-                <Text style={styles.statusText}>{userData.status}</Text>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Enhanced Header with user info */}
+        <Animated.View 
+          style={[
+            styles.header,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          <LinearGradient
+            colors={[Colors.PRIMARY, Colors.SECONDARY]}
+            style={styles.headerGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.userInfo}>
+              <View style={styles.avatarContainer}>
+                {userData.profileImage ? (
+                  <Image 
+                    source={{ uri: getImageUri(userData.profileImage) }} 
+                    style={styles.avatar}
+                    onError={(error) => {
+                      console.log('Image load error:', error);
+                    }}
+                  />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarText}>
+                      {getInitials(userData.name, userData.email)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.userDetails}>
+                <Text style={styles.userName}>Welcome, {userData.name || 'User'}</Text>
+                <Text style={styles.userRole}>{userData.role || 'Employee'}</Text>
+                <View style={styles.statusContainer}>
+                  <View
+                    style={[
+                      styles.statusIndicator,
+                      { backgroundColor: latestAttendance?.status === 'present' ? '#4CAF50' : '#F44336' },
+                    ]}
+                  />
+                  <Text style={styles.statusText}>
+                    {latestAttendance?.status === 'present' ? 'Present' : 'Absent'}
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
-          <TouchableOpacity style={styles.notificationButton}>
-            <Ionicons name="notifications" size={24} color="#333" />
-            {userData.notifications > 0 && (
+            <TouchableOpacity style={styles.notificationButton}>
+              <Ionicons name="notifications" size={24} color="rgba(255,255,255,0.9)" />
               <View style={styles.notificationBadge}>
-                <Text style={styles.notificationCount}>
-                  {userData.notifications}
-                </Text>
+                <Text style={styles.notificationCount}>3</Text>
               </View>
-            )}
-          </TouchableOpacity>
-        </View>
+            </TouchableOpacity>
+          </LinearGradient>
+        </Animated.View>
+
+        {/* Attendance Times Card */}
+        {latestAttendance && (
+          <Animated.View 
+            style={[
+              styles.attendanceCard,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }]
+              }
+            ]}
+          >
+            <LinearGradient
+              colors={['#E8F5E8', '#F0F8F0']}
+              style={styles.attendanceGradient}
+            >
+              <View style={styles.attendanceHeader}>
+                <Ionicons name="time" size={24} color={Colors.PRIMARY} />
+                <Text style={styles.attendanceTitle}>Today's Activity</Text>
+              </View>
+              
+              <View style={styles.attendanceRow}>
+                <View style={styles.attendanceItem}>
+                  <Ionicons name="log-in" size={20} color="#4CAF50" />
+                  <Text style={styles.attendanceLabel}>Login</Text>
+                  <Text style={styles.attendanceTime}>
+                    {formatTime(latestAttendance.loginTime)}
+                  </Text>
+                </View>
+                
+                <View style={styles.attendanceDivider} />
+                
+                <View style={styles.attendanceItem}>
+                  <Ionicons 
+                    name="log-out" 
+                    size={20} 
+                    color={latestAttendance.logoutTime ? "#FF6B6B" : "#999"} 
+                  />
+                  <Text style={styles.attendanceLabel}>Logout</Text>
+                  <Text style={[
+                    styles.attendanceTime,
+                    !latestAttendance.logoutTime && styles.attendanceTimeInactive
+                  ]}>
+                    {latestAttendance.logoutTime ? formatTime(latestAttendance.logoutTime) : 'Active'}
+                  </Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </Animated.View>
+        )}
 
         {/* Quick Stats */}
         <View style={styles.statsContainer}>
@@ -565,41 +748,74 @@ const Home = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f5f7fa',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: Colors.GRAY,
   },
   header: {
+    marginBottom: 20,
+  },
+  headerGradient: {
+    padding: 20,
+    paddingTop: 30,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
   },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+  },
+  avatarContainer: {
+    marginRight: 15,
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 3,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  avatarPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  avatarText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  userDetails: {
+    flex: 1,
   },
   userName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#fff',
+    marginBottom: 4,
   },
   userRole: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 6,
   },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
   },
   statusIndicator: {
     width: 8,
@@ -609,7 +825,8 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
   },
   notificationButton: {
     position: 'relative',
@@ -617,9 +834,9 @@ const styles = StyleSheet.create({
   },
   notificationBadge: {
     position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#F44336',
+    top: 2,
+    right: 2,
+    backgroundColor: '#FF6B6B',
     borderRadius: 10,
     width: 20,
     height: 20,
@@ -628,8 +845,63 @@ const styles = StyleSheet.create({
   },
   notificationCount: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: 'bold',
+  },
+  attendanceCard: {
+    marginHorizontal: 15,
+    marginBottom: 20,
+    borderRadius: 15,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  attendanceGradient: {
+    padding: 20,
+  },
+  attendanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  attendanceTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.PRIMARY,
+    marginLeft: 10,
+  },
+  attendanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  attendanceItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  attendanceDivider: {
+    width: 1,
+    height: 50,
+    backgroundColor: 'rgba(76, 175, 80, 0.3)',
+    marginHorizontal: 20,
+  },
+  attendanceLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  attendanceTime: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  attendanceTimeInactive: {
+    color: '#999',
+    fontSize: 14,
   },
   statsContainer: {
     flexDirection: 'row',

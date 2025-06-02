@@ -131,6 +131,41 @@ export default function Login() {
     }
   };
 
+  const checkUserProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await axios.get('http://192.168.137.1:5000/api/profile', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success) {
+        const user = response.data.user;
+        console.log('User profile data:', user);
+        console.log('Has profile image:', !!user.profileImage);
+        console.log('Has name:', !!user.name);
+        
+        // If user doesn't have a profile image or name, redirect to image picker
+        if (!user.profileImage || !user.name) {
+          console.log('Redirecting to image picker...');
+          router.replace('/image-picker');
+        } else {
+          console.log('User has profile, redirecting to home...');
+          router.replace('/(tabs)/home');
+        }
+      } else {
+        console.log('Profile fetch failed, going to home...');
+        // If profile fetch fails, still go to home
+        router.replace('/(tabs)/home');
+      }
+    } catch (error) {
+      console.error('Profile check error:', error);
+      // If profile check fails, still go to home
+      router.replace('/(tabs)/home');
+    }
+  };
+
   const handleLogin = async () => {
     setError('');
     setAttendanceInfo(null);
@@ -151,7 +186,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://192.168.1.56:5000/api/admin/login', {
+      const response = await axios.post('http://192.168.137.1:5000/api/admin/login', {
         email,
         password,
         location: userLocation,
@@ -183,11 +218,13 @@ export default function Login() {
         // Show attendance message for 3 seconds before redirecting
         setIsLoading(false);
         setTimeout(() => {
-          router.replace('/(tabs)/home');
+          // Check if user has profile image, if not redirect to image picker
+          checkUserProfile();
         }, 3000);
       } else {
         setIsLoading(false);
-        router.replace('/(tabs)/home');
+        // Check if user has profile image, if not redirect to image picker
+        checkUserProfile();
       }
     } catch (err) {
       setIsLoading(false);
