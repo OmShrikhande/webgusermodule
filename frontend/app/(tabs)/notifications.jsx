@@ -130,9 +130,12 @@ export default function NotificationsScreen() {
   const updateVisitLocationStatus = async (visitLocationId, newStatus, userFeedback = '') => {
     try {
       const token = await AsyncStorage.getItem('token');
-      
+      let body = { visitStatus: newStatus, userFeedback };
+      if (newStatus === 'completed' && userLocation) {
+        body.userLocation = userLocation;
+      }
       const response = await axios.put(`${API_URL}/api/visit-locations/${visitLocationId}/status`, 
-        { visitStatus: newStatus, userFeedback },
+        body,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -454,13 +457,24 @@ export default function NotificationsScreen() {
               )}
               
               {selectedLocation?.visitStatus === 'in-progress' && (
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.completeButton]}
-                  onPress={() => updateVisitLocationStatus(selectedLocation._id, 'completed')}
-                >
-                  <Ionicons name="checkmark" size={16} color="#fff" />
-                  <Text style={styles.actionButtonText}>Complete</Text>
-                </TouchableOpacity>
+                // Only show if user is within 50 meters of the assigned location
+                userLocation &&
+                selectedLocation.location?.latitude &&
+                selectedLocation.location?.longitude &&
+                calculateDistance(
+                  userLocation.latitude,
+                  userLocation.longitude,
+                  selectedLocation.location.latitude,
+                  selectedLocation.location.longitude
+                ) <= 50 && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.completeButton]}
+                    onPress={() => updateVisitLocationStatus(selectedLocation._id, 'completed')}
+                  >
+                    <Ionicons name="checkmark" size={16} color="#fff" />
+                    <Text style={styles.actionButtonText}>Complete</Text>
+                  </TouchableOpacity>
+                )
               )}
               
               <TouchableOpacity

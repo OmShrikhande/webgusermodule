@@ -3,6 +3,8 @@ const router = express.Router();
 const VisitLocation = require('../model/visitLocationModel.cjs');
 const Notification = require('../model/notificationModel.cjs');
 const { authenticateToken } = require('../middleware/auth.cjs');
+const { calculateDistance } = require('../utils/locationUtils.cjs');
+const { maxAllowedDistance } = require('../config/locationConfig.cjs');
 
 // Get all visit locations assigned to a user
 router.get('/visit-locations/assigned/:userId', authenticateToken, async (req, res) => {
@@ -86,29 +88,54 @@ router.put('/visit-locations/:visitLocationId/read', authenticateToken, async (r
 router.put('/visit-locations/:visitLocationId/status', authenticateToken, async (req, res) => {
     try {
         const { visitLocationId } = req.params;
-        const { visitStatus, userFeedback } = req.body;
-        
-        const updateData = { visitStatus };
-        if (userFeedback) {
-            updateData.userFeedback = userFeedback;
-        }
-        if (visitStatus === 'completed') {
-            updateData.visitDate = new Date();
-        }
-        
-        const visitLocation = await VisitLocation.findByIdAndUpdate(
-            visitLocationId,
-            updateData,
-            { new: true }
-        );
-        
+        const { visitStatus, userFeedback, userLocation } = req.body;
+
+        // Find the visit location
+        const visitLocation = await VisitLocation.findById(visitLocationId);
         if (!visitLocation) {
             return res.status(404).json({
                 success: false,
                 message: 'Visit location not found'
             });
         }
-        
+
+        // Only allow completion if user is at the assigned location
+        if (visitStatus === 'completed') {
+            if (
+                !userLocation ||
+                typeof userLocation.latitude !== 'number' ||
+                typeof userLocation.longitude !== 'number'
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'User location (latitude, longitude) is required to complete the task.'
+                });
+            }
+
+            const assigned = visitLocation.location;
+            const distance = calculateDistance(
+                userLocation.latitude,
+                userLocation.longitude,
+                assigned.latitude,
+                assigned.longitude
+            );
+
+            if (distance > maxAllowedDistance) {
+                return res.status(400).json({
+                    success: false,
+                    message: `You must be at the assigned location to complete this task. Distance: ${Math.round(distance)}m`
+                });
+            }
+        }
+
+        // Update status and feedback
+        visitLocation.visitStatus = visitStatus;
+        if (userFeedback) visitLocation.userFeedback = userFeedback;
+        if (visitStatus === 'completed') {
+            visitLocation.visitDate = new Date();
+        }
+        await visitLocation.save();
+
         return res.status(200).json({
             success: true,
             visitLocation

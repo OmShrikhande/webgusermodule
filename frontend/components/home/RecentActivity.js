@@ -1,13 +1,10 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text } from 'react-native';
 
 const RecentActivity = ({ timeline, styles }) => (
   <View style={styles.sectionContainer}>
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>Recent Activity</Text>
-      <TouchableOpacity>
-        <Text style={styles.seeAllText}>See All</Text>
-      </TouchableOpacity>
     </View>
     {timeline.map((activity) => (
       <View key={activity.id} style={styles.timelineItem}>

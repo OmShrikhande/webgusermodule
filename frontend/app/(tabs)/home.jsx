@@ -500,6 +500,17 @@ const Home = () => {
   const completedTasks = visitLocations.filter(v => v.visitStatus === 'completed');
   const pendingTasks = visitLocations.filter(v => v.visitStatus !== 'completed');
 
+  const recentCompletedTasks = completedTasks
+  .sort((a, b) => new Date(b.visitDate) - new Date(a.visitDate))
+  .slice(0, 3)
+  .map((task, idx) => ({
+    id: task._id || idx,
+    user: userData?.name || 'You',
+    action: 'completed',
+    item: task.address || task.title || 'Task',
+    time: task.visitDate ? new Date(task.visitDate).toLocaleString() : '',
+  }));
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Notification Popup */}
@@ -564,7 +575,13 @@ const Home = () => {
         )}
 
         {/* Quick Stats */}
-        <QuickStats userData={userData} deadlines={deadlines} styles={styles} />
+        <QuickStats
+          userData={userData}
+          deadlines={pendingTasks} // Use pendingTasks for real pending deadlines
+          styles={styles}
+          completedTasksCount={completedTasks.length}
+          totalTasksCount={visitLocations.length}
+        />
 
         {/* Navigation Options */}
         <View style={styles.navigationContainer}>
@@ -598,7 +615,7 @@ const Home = () => {
         />
 
         {/* Recent Activity */}
-        <RecentActivity timeline={timeline} styles={styles} />
+        <RecentActivity timeline={recentCompletedTasks} styles={styles} />
       </ScrollView>
     </SafeAreaView>
   );

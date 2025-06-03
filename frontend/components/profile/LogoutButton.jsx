@@ -1,13 +1,19 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
-import { useNavigation } from 'expo-router';
+import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Colors } from '@/constants/Colors';
+import Constants from 'expo-constants';
+
+// Dynamically get local IP for API URL
+const { debuggerHost } = Constants.expoConfig?.hostUri
+  ? { debuggerHost: Constants.expoConfig.hostUri }
+  : { debuggerHost: undefined };
+const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
+const API_URL = `http://${localIP}:5000`;
 
 const LogoutButton = () => {
-  const navigation = useNavigation();
-
   const handleLogout = async () => {
     Alert.alert(
       'Logout',
@@ -23,18 +29,17 @@ const LogoutButton = () => {
             try {
               const token = await AsyncStorage.getItem('token');
               if (token) {
-                await axios.post('http://192.168.137.1:5000/api/logout', {}, {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                  },
+                await axios.post(`${API_URL}/api/logout`, {}, {
+                  headers: { Authorization: `Bearer ${token}` }
                 });
               }
+            } catch (error) {
+              // Optionally log error, but proceed with logout
+              console.error('Error during logout:', error);
+            } finally {
               await AsyncStorage.removeItem('token');
               await AsyncStorage.removeItem('userId');
-              navigation.replace('/login');
-            } catch (error) {
-              console.error('Error during logout:', error);
-              navigation.replace('/login');
+              router.replace('/login');
             }
           },
           style: 'destructive',
