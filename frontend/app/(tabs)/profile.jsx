@@ -20,8 +20,6 @@ import {
   Header,
   AttendanceSection,
   SettingsSection,
-  AccountSection,
-  HelpSection,
   LogoutButton,
 } from '@/components/profile';
 
@@ -88,6 +86,7 @@ const Profile = () => {
       if (response.data.success) {
         setUser(response.data.user);
         setLatestAttendance(response.data.latestAttendance);
+        console.log('Fetched user:', response.data.user); // Add this line
       }
     } catch (error) {
       console.log('Profile fetch error:', error);
@@ -179,26 +178,6 @@ const Profile = () => {
           toggleNotifications={toggleNotifications}
           toggleDarkMode={toggleDarkMode}
         />
-      </Animated.View>
-
-      {/* Account Section */}
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }}
-      >
-        <AccountSection />
-      </Animated.View>
-
-      {/* Help Section */}
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }}
-      >
-        <HelpSection />
       </Animated.View>
 
       {/* Logout Button */}

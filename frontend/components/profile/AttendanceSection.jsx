@@ -88,11 +88,12 @@ const styles = {
   attendanceCard: {
     borderRadius: 15,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    // shadowColor: '#000',
+    // shadowOffset: { width: 0, height: 5 },
+    // shadowOpacity: 0.1,
+    // shadowRadius: 10,
+    // elevation: 5,
+    boxShadow: '0px 5px 10px rgba(0,0,0,0.1)',
   },
   attendanceGradient: {
     padding: 20,

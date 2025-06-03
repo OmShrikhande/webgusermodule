@@ -399,7 +399,11 @@ export default function ImagePickerScreen() {
         {/* Image Preview */}
         <View style={styles.imageContainer}>
           {selectedImage ? (
-            <Image source={{ uri: selectedImage.uri }} style={styles.selectedImage} />
+            <Image 
+              source={{ uri: selectedImage.uri }} 
+              style={styles.selectedImage} 
+              resizeMode="cover"
+            />
           ) : (
             <View style={styles.placeholderImage}>
               <Ionicons name="camera" size={50} color="rgba(255,255,255,0.5)" />
@@ -482,6 +486,9 @@ export default function ImagePickerScreen() {
           </Link>
         </View>
       </Animated.View>
+
+      {/* Disable interactions on the entire view */}
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, pointerEvents: 'none' }} />
     </View>
   );
 }
@@ -542,9 +549,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 10,
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadow: '1px 1px 3px rgba(0,0,0,0.3)',
   },
   subtitle: {
     fontSize: 16,
@@ -597,11 +602,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     borderRadius: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 15,
-    elevation: 8,
+    boxShadow: '0px 10px 15px rgba(0,0,0,0.2)',
   },
   actionButtonGradient: {
     flexDirection: 'row',
