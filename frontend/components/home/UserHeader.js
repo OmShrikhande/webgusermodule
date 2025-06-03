@@ -3,7 +3,7 @@ import { View, Text, Image, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
-const UserHeader = ({ userData, latestAttendance, fadeAnim, slideAnim, getImageUri, getInitials, Colors, styles }) => (
+const UserHeader = ({ userData, latestAttendance, fadeAnim, slideAnim, getImageUri, getInitials, Colors, styles, onNotificationPress, unreadTasksCount }) => (
   <LinearGradient
     colors={[Colors.PRIMARY, Colors.SECONDARY]}
     style={styles.headerGradient}
@@ -41,11 +41,13 @@ const UserHeader = ({ userData, latestAttendance, fadeAnim, slideAnim, getImageU
         </View>
       </View>
     </View>
-    <TouchableOpacity style={styles.notificationButton}>
+    <TouchableOpacity style={styles.notificationButton} onPress={onNotificationPress}>
       <Ionicons name="notifications" size={24} color="rgba(255,255,255,0.9)" />
-      <View style={styles.notificationBadge}>
-        <Text style={styles.notificationCount}>3</Text>
-      </View>
+      {unreadTasksCount > 0 && (
+        <View style={styles.notificationBadge}>
+          <Text style={styles.notificationCount}>{unreadTasksCount}</Text>
+        </View>
+      )}
     </TouchableOpacity>
   </LinearGradient>
 );

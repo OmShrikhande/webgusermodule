@@ -7,9 +7,10 @@ import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import NotificationPopup from '../../components/NotificationPopup';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import UserHeader from '../../components/home/UserHeader';
 import AttendanceCard from '../../components/home/AttendanceCard';
 import QuickStats from '../../components/home/QuickStats';
@@ -41,8 +42,14 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c; // Distance in meters
 };
 
-// Define background location task
-// In TaskManager.defineTask
+// Get the local IP address automatically from Expo
+const { debuggerHost } = Constants.expoConfig?.hostUri
+  ? { debuggerHost: Constants.expoConfig.hostUri }
+  : { debuggerHost: undefined };
+const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
+const API_URL = `http://${localIP}:5000`;
+
+// Now define TaskManager task
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
     console.error('Background location error:', error);
@@ -50,7 +57,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   }
   if (data) {
     const { locations } = data;
-    const userId = await AsyncStorage.getItem('userId'); // <-- get userId
+    const userId = await AsyncStorage.getItem('userId');
     if (!userId) {
       console.warn('No userId found in storage');
       return;
@@ -83,6 +90,9 @@ const Home = () => {
   // Real user data from backend
   const [userData, setUserData] = useState(null);
   const [latestAttendance, setLatestAttendance] = useState(null);
+  
+  // Notification state
+  const [unreadTasksCount, setUnreadTasksCount] = useState(0);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -127,29 +137,7 @@ const Home = () => {
     { id: 3, title: 'Quarterly Report', date: '2023-06-30', priority: 'Low' },
   ]);
 
-  const [tasks, setTasks] = useState([
-    {
-      id: 1,
-      title: 'Fix navigation bug',
-      assignedTo: 'You',
-      dueDate: '2023-06-08',
-      status: 'In Progress',
-    },
-    {
-      id: 2,
-      title: 'Create user dashboard',
-      assignedTo: 'Alice Smith',
-      dueDate: '2023-06-12',
-      status: 'Pending',
-    },
-    {
-      id: 3,
-      title: 'Update API documentation',
-      assignedTo: 'You',
-      dueDate: '2023-06-09',
-      status: 'In Progress',
-    },
-  ]);
+  const [visitLocations, setVisitLocations] = useState([]);
 
   const [products, setProducts] = useState([
     {
@@ -226,10 +214,61 @@ const Home = () => {
     }
   };
 
+  // Fetch unread visit locations count
+  const fetchUnreadTasksCount = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const userId = await AsyncStorage.getItem('userId');
+      
+      if (!token || !userId) return;
+
+      const response = await axios.get(`${API_URL}/api/visit-locations/unread-count/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success) {
+        setUnreadTasksCount(response.data.unreadCount);
+      }
+    } catch (error) {
+      console.error('Error fetching unread visit locations count:', error);
+    }
+  };
+
+  // Fetch visit locations
+  const fetchVisitLocations = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const userId = await AsyncStorage.getItem('userId');
+      
+      if (!token || !userId) return;
+
+      const response = await axios.get(`${API_URL}/api/visit-locations/assigned/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data.success) {
+        setVisitLocations(response.data.visitLocations);
+      }
+    } catch (error) {
+      console.error('Error fetching visit locations:', error);
+    }
+  };
+
+  // Handle notification bell press
+  const handleNotificationPress = () => {
+    router.push('/notifications');
+  };
+
   // Focus effect to refresh data when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       fetchUserProfile();
+      fetchUnreadTasksCount();
+      fetchVisitLocations();
       
       // Start entrance animations
       Animated.parallel([
@@ -250,6 +289,8 @@ const Home = () => {
   const onRefresh = () => {
     setRefreshing(true);
     fetchUserProfile();
+    fetchUnreadTasksCount();
+    fetchVisitLocations();
   };
 
   useEffect(() => {
@@ -445,13 +486,6 @@ const Home = () => {
     return profileImage;
   };
 
-  // Get the local IP address automatically from Expo
-const { debuggerHost } = Constants.expoConfig?.hostUri
-  ? { debuggerHost: Constants.expoConfig.hostUri }
-  : { debuggerHost: undefined };
-const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
-const API_URL = `http://${localIP}:5000`;
-
   if (!userData) {
     return (
       <SafeAreaView style={styles.container}>
@@ -462,6 +496,10 @@ const API_URL = `http://${localIP}:5000`;
     );
   }
 
+  // Filter completed and pending
+  const completedTasks = visitLocations.filter(v => v.visitStatus === 'completed');
+  const pendingTasks = visitLocations.filter(v => v.visitStatus !== 'completed');
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Notification Popup */}
@@ -471,6 +509,8 @@ const API_URL = `http://${localIP}:5000`;
         message={alertMessage}
         distance={alertDistance}
       />
+      
+
       <ScrollView 
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -496,6 +536,8 @@ const API_URL = `http://${localIP}:5000`;
             getInitials={getInitials}
             Colors={Colors}
             styles={styles}
+            onNotificationPress={handleNotificationPress}
+            unreadTasksCount={unreadTasksCount}
           />
         </Animated.View>
 
@@ -545,10 +587,15 @@ const API_URL = `http://${localIP}:5000`;
         </View>
 
         {/* Upcoming Deadlines */}
-        <UpcomingDeadlines deadlines={deadlines} styles={styles} getPriorityColor={getPriorityColor} />
+        <UpcomingDeadlines deadlines={pendingTasks} styles={styles} getPriorityColor={getPriorityColor} />
 
         {/* Assigned Tasks */}
-        <AssignedTasks tasks={tasks} styles={styles} />
+        <AssignedTasks 
+          visitLocations={completedTasks} 
+          styles={styles} 
+          onSeeAllPress={handleNotificationPress}
+          showCount // Add this prop if your component supports showing count
+        />
 
         {/* Recent Activity */}
         <RecentActivity timeline={timeline} styles={styles} />
@@ -947,6 +994,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginTop: 4,
+  },
+  adminNotes: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  emptyTasksContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptyTasksText: {
+    fontSize: 14,
+    color: '#999',
+    fontStyle: 'italic',
   },
 });
 

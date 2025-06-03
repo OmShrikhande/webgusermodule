@@ -5,6 +5,8 @@ const cors = require('cors');
 const connectDB = require('./config/db.cjs');
 const authRoutes = require('./routes/authroutes.cjs');
 const notificationRoutes = require('./routes/notificationRoutes.cjs');
+const taskRoutes = require('./routes/taskRoutes.cjs');
+const visitLocationRoutes = require('./routes/visitLocationRoutes.cjs');
 
 const app = express();
 
@@ -20,6 +22,8 @@ connectDB();
 
 app.use('/api', authRoutes);
 app.use('/api', notificationRoutes);
+app.use('/api', taskRoutes);
+app.use('/api', visitLocationRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
