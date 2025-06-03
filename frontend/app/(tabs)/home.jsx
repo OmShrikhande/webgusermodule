@@ -7,8 +7,8 @@ import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import NotificationPopup from '../../components/NotificationPopup';
-
 import { LinearGradient } from 'expo-linear-gradient';
+
 import { Colors } from '@/constants/Colors';
 import { useFocusEffect, router } from 'expo-router';
 import UserHeader from '../../components/home/UserHeader';
@@ -488,11 +488,18 @@ const Home = () => {
 
   if (!userData) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
-        </View>
-      </SafeAreaView>
+      <LinearGradient
+        colors={[Colors.PRIMARY, Colors.SECONDARY]}
+        style={{ flex: 1 }}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
     );
   }
 
@@ -512,128 +519,135 @@ const Home = () => {
   }));
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Notification Popup */}
-      <NotificationPopup
-        visible={notificationVisible}
-        onClose={() => setNotificationVisible(false)}
-        message={alertMessage}
-        distance={alertDistance}
-      />
+    <LinearGradient
+      colors={[Colors.PRIMARY, Colors.SECONDARY]}
+      style={{ flex: 1 }}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
+      <ScrollView 
+      showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
+      <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }}>
+        {/* Notification Popup */}
+        <NotificationPopup
+          visible={notificationVisible}
+          onClose={() => setNotificationVisible(false)}
+          message={alertMessage}
+          distance={alertDistance}
+        />
       
 
-      <ScrollView 
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {/* Enhanced Header with user info */}
-        <Animated.View 
-          style={[
-            styles.header,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
-        >
-          <UserHeader
-            userData={userData}
-            latestAttendance={latestAttendance}
-            fadeAnim={fadeAnim}
-            slideAnim={slideAnim}
-            getImageUri={getImageUri}
-            getInitials={getInitials}
-            Colors={Colors}
-            styles={styles}
-            onNotificationPress={handleNotificationPress}
-            unreadTasksCount={unreadTasksCount}
-          />
-        </Animated.View>
-
-        {/* Attendance Times Card */}
-        {latestAttendance && (
+        
+          
+          {/* Enhanced Header with user info */}
           <Animated.View 
             style={[
-              styles.attendanceCard,
+              styles.header,
               {
                 opacity: fadeAnim,
                 transform: [{ translateY: slideAnim }]
               }
             ]}
           >
-            <AttendanceCard
+            <UserHeader
+              userData={userData}
               latestAttendance={latestAttendance}
               fadeAnim={fadeAnim}
               slideAnim={slideAnim}
-              formatTime={formatTime}
+              getImageUri={getImageUri}
+              getInitials={getInitials}
               Colors={Colors}
               styles={styles}
+              onNotificationPress={handleNotificationPress}
+              unreadTasksCount={unreadTasksCount}
             />
           </Animated.View>
-        )}
 
-        {/* Quick Stats */}
-        <QuickStats
-          userData={userData}
-          deadlines={pendingTasks} // Use pendingTasks for real pending deadlines
-          styles={styles}
-          completedTasksCount={completedTasks.length}
-          totalTasksCount={visitLocations.length}
-        />
+          {/* Attendance Times Card */}
+          {latestAttendance && (
+            <Animated.View 
+              style={[
+                styles.attendanceCard,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateY: slideAnim }]
+                }
+              ]}
+            >
+              <AttendanceCard
+                latestAttendance={latestAttendance}
+                fadeAnim={fadeAnim}
+                slideAnim={slideAnim}
+                formatTime={formatTime}
+                Colors={Colors}
+                styles={styles}
+              />
+            </Animated.View>
+          )}
 
-        {/* Navigation Options */}
-        <View style={styles.navigationContainer}>
-          <TouchableOpacity style={styles.navButton}>
-            <Ionicons name="calendar" size={24} color="#4CAF50" />
-            <Text style={styles.navButtonText}>Calendar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navButton}>
-            <Ionicons name="people" size={24} color="#2196F3" />
-            <Text style={styles.navButtonText}>Team</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navButton}>
-            <Ionicons name="document-text" size={24} color="#FF9800" />
-            <Text style={styles.navButtonText}>Reports</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navButton}>
-            <Ionicons name="settings" size={24} color="#9E9E9E" />
-            <Text style={styles.navButtonText}>Settings</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Quick Stats */}
+          <QuickStats
+            userData={userData}
+            deadlines={pendingTasks} // Use pendingTasks for real pending deadlines
+            styles={styles}
+            completedTasksCount={completedTasks.length}
+            totalTasksCount={visitLocations.length}
+          />
 
-        {/* Upcoming Deadlines */}
-        <UpcomingDeadlines deadlines={pendingTasks} styles={styles} getPriorityColor={getPriorityColor} />
+          {/* Navigation Options */}
+          <View style={styles.navigationContainer}>
+            <TouchableOpacity style={styles.navButton}>
+              <Ionicons name="calendar" size={24} color="#4CAF50" />
+              <Text style={styles.navButtonText}>Calendar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navButton}>
+              <Ionicons name="people" size={24} color="#2196F3" />
+              <Text style={styles.navButtonText}>Team</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navButton}>
+              <Ionicons name="document-text" size={24} color="#FF9800" />
+              <Text style={styles.navButtonText}>Reports</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navButton}>
+              <Ionicons name="settings" size={24} color="#9E9E9E" />
+              <Text style={styles.navButtonText}>Settings</Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Assigned Tasks */}
-        <AssignedTasks 
-          visitLocations={completedTasks} 
-          styles={styles} 
-          onSeeAllPress={handleNotificationPress}
-          showCount // Add this prop if your component supports showing count
-        />
+          {/* Upcoming Deadlines */}
+          <UpcomingDeadlines deadlines={pendingTasks} styles={styles} getPriorityColor={getPriorityColor} />
 
-        {/* Recent Activity */}
-        <RecentActivity timeline={recentCompletedTasks} styles={styles} />
-      </ScrollView>
-    </SafeAreaView>
+          {/* Assigned Tasks */}
+          <AssignedTasks 
+            visitLocations={completedTasks} 
+            styles={styles} 
+            onSeeAllPress={handleNotificationPress}
+            showCount // Add this prop if your component supports showing count
+          />
+
+          {/* Recent Activity */}
+          <RecentActivity timeline={recentCompletedTasks} styles={styles} />
+      
+      </SafeAreaView>
+        </ScrollView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f7fa',
+    backgroundColor: 'transparent', // was '#f5f7fa'
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    color: Colors.GRAY,
+    backgroundColor: 'transparent', // remove solid color
   },
   header: {
     marginBottom: 20,
@@ -811,7 +825,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 16,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.85)', // or 'transparent' for full gradient
     borderRadius: 8,
     marginHorizontal: 16,
     shadowColor: '#000',
@@ -829,7 +843,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sectionContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.85)', // or 'transparent'
     borderRadius: 8,
     padding: 16,
     margin: 16,

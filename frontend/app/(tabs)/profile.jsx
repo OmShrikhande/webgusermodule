@@ -14,6 +14,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Import modularized components
 import {
@@ -22,6 +23,7 @@ import {
   SettingsSection,
   LogoutButton,
 } from '@/components/profile';
+import { useTheme } from '@/context/ThemeContext';
 
 // Use expoConfig instead of manifest
 const { debuggerHost } = Constants.expoConfig?.hostUri
@@ -32,8 +34,8 @@ const API_URL = `http://${localIP}:5000`;
 
 const Profile = () => {
   const navigation = useNavigation();
+  const { darkMode, themeColors, toggleDarkMode } = useTheme();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [darkModeEnabled, setDarkModeEnabled] = useState(false);
   const [user, setUser] = useState(null);
   const [latestAttendance, setLatestAttendance] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -114,105 +116,125 @@ const Profile = () => {
 
   // Settings toggles
   const toggleNotifications = () => setNotificationsEnabled((prev) => !prev);
-  const toggleDarkMode = () => setDarkModeEnabled((prev) => !prev);
+
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.PRIMARY} />
-        <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
+      <LinearGradient
+        colors={[Colors.PRIMARY, Colors.SECONDARY]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{ flex: 1 }}
+      >
+        <View style={[styles.loadingContainer, { backgroundColor: 'transparent' }]}>
+          <ActivityIndicator size="large" color={Colors.PRIMARY} />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </LinearGradient>
     );
   }
 
   if (!user) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Failed to load profile</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchUserProfile}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
+      <LinearGradient
+        colors={[Colors.PRIMARY, Colors.SECONDARY]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{ flex: 1 }}
+      >
+        <View style={[styles.errorContainer, { backgroundColor: 'transparent' }]}>
+          <Text style={styles.errorText}>Failed to load profile</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchUserProfile}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
+    <LinearGradient
+      colors={[Colors.PRIMARY, Colors.SECONDARY]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ flex: 1 }}
     >
-      {/* Profile Header */}
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }}
+      <ScrollView
+        style={[styles.container, { backgroundColor: 'transparent' }]}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
-        <Header user={user} onEditAvatar={() => router.push('/image-picker')} />
-      </Animated.View>
-
-      {/* Attendance Section */}
-      {latestAttendance && (
+        {/* Profile Header */}
         <Animated.View
           style={{
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }],
           }}
         >
-          <AttendanceSection latestAttendance={latestAttendance} />
+          <Header user={user} onEditAvatar={() => router.push('/image-picker')} />
         </Animated.View>
-      )}
 
-      {/* Settings Section */}
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }}
-      >
-        <SettingsSection
-          notificationsEnabled={notificationsEnabled}
-          darkModeEnabled={darkModeEnabled}
-          toggleNotifications={toggleNotifications}
-          toggleDarkMode={toggleDarkMode}
-        />
-      </Animated.View>
+        {/* Attendance Section */}
+        {latestAttendance && (
+          <Animated.View
+            style={{
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            }}
+          >
+            <AttendanceSection latestAttendance={latestAttendance} />
+          </Animated.View>
+        )}
 
-      {/* Logout Button */}
-      <Animated.View
-        style={{
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }}
-      >
-        <LogoutButton />
-      </Animated.View>
-
-      {/* App Info */}
-      <Animated.View
-        style={[
-          styles.appInfo,
-          {
+        {/* Settings Section */}
+        <Animated.View
+          style={{
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
-        <Text style={styles.appVersion}>Version 1.0.0</Text>
-        <Text style={styles.appCopyright}>
-          © 2024 {Colors.Appname}. All rights reserved.
-        </Text>
-      </Animated.View>
-    </ScrollView>
+          }}
+        >
+          <SettingsSection
+            notificationsEnabled={notificationsEnabled}
+            darkModeEnabled={darkMode}
+            toggleNotifications={toggleNotifications}
+            toggleDarkMode={toggleDarkMode}
+          />
+        </Animated.View>
+
+        {/* Logout Button */}
+        <Animated.View
+          style={{
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }}
+        >
+          <LogoutButton />
+        </Animated.View>
+
+        {/* App Info */}
+        <Animated.View
+          style={[
+            styles.appInfo,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+        >
+          <Text style={styles.appVersion}>Version 1.0.0</Text>
+          <Text style={styles.appCopyright}>
+            © 2024 {Colors.Appname}. All rights reserved.
+          </Text>
+        </Animated.View>
+      </ScrollView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f7fa',
   },
   loadingContainer: {
     flex: 1,

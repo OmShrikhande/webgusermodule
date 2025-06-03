@@ -15,24 +15,30 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors.PRIMARY,
-        tabBarInactiveTintColor: Colors.PRIMARY,
+        tabBarActiveTintColor: Colors.WHITE,
+        tabBarInactiveTintColor: Colors.LIGHT_GREY,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
         tabBarStyle: Platform.select({
           ios: {
-            // Use a transparent background on iOS to show the blur effect
             position: 'absolute',
+            backgroundColor: 'transparent', // <--- ensure this is transparent
+            borderTopWidth: 0, // optional: remove border
+            elevation: 0, // optional: remove shadow on Android
           },
-          default: {},
+          default: {
+            backgroundColor: 'transparent',
+            borderTopWidth: 0,
+            elevation: 0,
+          },
         }),
       }}>
       <Tabs.Screen
         name="home"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={Colors.PRIMARY} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -40,7 +46,7 @@ export default function TabLayout() {
         options={{
           title: 'Notifications',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="notifications-outline" size={28} color={Colors.PRIMARY} />
+            <Ionicons name="notifications-outline" size={28} color={color} />
           ),
         }}
       />
@@ -49,7 +55,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-circle-outline" size={28} color={Colors.PRIMARY} />
+            <Ionicons name="person-circle-outline" size={28} color={color} />
           ),
         }}
       />

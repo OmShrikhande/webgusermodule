@@ -290,12 +290,26 @@ export default function Login() {
               }
             ]}
           >
-            <Animated.View style={{ transform: [{ rotate: logoRotate }] }}>
-              <Image
-                source={require('../assets/images/icon.png')}
-                style={styles.logo}
-              />
-            </Animated.View>
+            {/* Enlightenment Glow Effect (behind logo) */}
+            <Animated.View
+              style={[
+                styles.glow,
+                {
+                  opacity: pulseAnim.interpolate({
+                    inputRange: [0.6, 0.7],
+                    outputRange: [0.3, 0.2]
+                  }),
+                  transform: [
+                    { scale: pulseAnim }
+                  ]
+                }
+              ]}
+            />
+            {/* Logo Image (above glow) */}
+            <Image
+              source={require('../assets/images/applogo.png')}
+              style={styles.logo}
+            />
             <Text style={styles.appName}>{Colors.Appname}</Text>
             <Text style={styles.tagline}>Attendance Management System</Text>
           </Animated.View>
@@ -430,17 +444,10 @@ export default function Login() {
             </TouchableOpacity>
 
             {/* Forgot Password */}
-            <TouchableOpacity style={styles.forgotPassword}>
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
+            
 
             {/* Sign Up Link */}
-            <View style={styles.signupContainer}>
-              <Text style={styles.signupText}>Don't have an account? </Text>
-              <TouchableOpacity>
-                <Text style={styles.signupLink}>Sign Up</Text>
-              </TouchableOpacity>
-            </View>
+          
           </Animated.View>
 
           {/* Footer */}
@@ -450,7 +457,7 @@ export default function Login() {
               { opacity: fadeAnim }
             ]}
           >
-            <Text style={styles.footerText}>© 2024 {Colors.Appname}</Text>
+            <Text style={styles.footerText}>© 2025 {Colors.Appname}</Text>
             <Text style={styles.footerSubtext}>Secure • Reliable • Efficient</Text>
           </Animated.View>
         </ScrollView>
@@ -537,16 +544,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   formContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 25,
-    padding: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)', // more transparent for glass effect
+    borderRadius: 30,
+    padding: 32,
     marginHorizontal: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.2,
-    shadowRadius: 25,
-    elevation: 15,
-    backdropFilter: 'blur(10px)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,01)',
+    // Remove backdropFilter if not supported, or use expo-blur for real blur
+    // backdropFilter: 'blur(12px)', // Only works on web
+    // For React Native, use expo-blur:
+    // overflow: 'hidden',
   },
   formHeader: {
     alignItems: 'center',
@@ -713,5 +720,21 @@ const styles = StyleSheet.create({
   footerSubtext: {
     color: 'rgba(255, 255, 255, 0.6)',
     fontSize: 12,
+  },
+  glow: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    top: -30,
+    left: '50%',
+    marginLeft: -90,
+    backgroundColor: 'rgba(255, 255, 200, 0.7)', // soft yellowish glow
+    shadowColor: '#fffbe6',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 20,
+    zIndex: 0,
   },
 });

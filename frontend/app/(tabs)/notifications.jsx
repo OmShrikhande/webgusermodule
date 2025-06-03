@@ -20,6 +20,8 @@ import { useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Colors } from '@/constants/Colors';
 
 // Get the local IP address automatically from Expo
 const { debuggerHost } = Constants.expoConfig?.hostUri
@@ -516,54 +518,59 @@ export default function NotificationsScreen() {
     });
 
   return (
-    <SafeAreaView style={styles.container}>
-      {!showDetails ? (
-        <>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Visit Locations</Text>
-          </View>
+    <LinearGradient
+      colors={[Colors.PRIMARY, Colors.SECONDARY]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ flex: 1 }}
+    >
+      <SafeAreaView style={[styles.container, { backgroundColor: 'transparent' }]}>
+        {!showDetails ? (
+          <>
           
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search locations, notes, or status..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholderTextColor="#999"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                <Ionicons name="close-circle" size={20} color="#999" />
-              </TouchableOpacity>
-            )}
-          </View>
-          
-          <FlatList
-            data={[...pendingLocations, ...completedLocations]}
-            renderItem={renderLocationCard}
-            keyExtractor={item => item._id}
-            contentContainerStyle={styles.listContainer}
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Ionicons name="location-outline" size={64} color="#ccc" />
-                <Text style={styles.emptyText}>
-                  {searchQuery ? 'No matching locations found' : 'No visit locations assigned'}
-                </Text>
-              </View>
-            }
-            refreshControl={
-              <RefreshControl
-                refreshing={loading}
-                onRefresh={fetchVisitLocations}
+            
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search locations, notes, or status..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor="#999"
               />
-            }
-          />
-        </>
-      ) : (
-        renderDetailView()
-      )}
-    </SafeAreaView>
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                  <Ionicons name="close-circle" size={20} color="#999" />
+                </TouchableOpacity>
+              )}
+            </View>
+            
+            <FlatList
+              data={[...pendingLocations, ...completedLocations]}
+              renderItem={renderLocationCard}
+              keyExtractor={item => item._id}
+              contentContainerStyle={styles.listContainer}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="location-outline" size={64} color="#ccc" />
+                  <Text style={styles.emptyText}>
+                    {searchQuery ? 'No matching locations found' : 'No visit locations assigned'}
+                  </Text>
+                </View>
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={loading}
+                  onRefresh={fetchVisitLocations}
+                />
+              }
+            />
+          </>
+        ) : (
+          renderDetailView()
+        )}
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 

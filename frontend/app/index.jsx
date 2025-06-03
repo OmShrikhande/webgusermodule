@@ -36,7 +36,7 @@ export default function Index() {
     >
       {/* Replace this with your own cool graphic, logo, or animation */}
       <Image
-        source={require('../assets/images/icon.png')} // Make sure to replace with your logo path
+        source={require('../assets/images/applogo.png')} // Make sure to replace with your logo path
         style={styles.logo}
       />
       <Text style={styles.appName}>{Colors.Appname}</Text>

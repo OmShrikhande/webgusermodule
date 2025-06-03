@@ -79,7 +79,7 @@ const styles = {
   header: {
     marginBottom: 20,
     alignItems: 'center',
-    backgroundColor: '#222e3a',
+    backgroundColor: 'transparent',
     paddingVertical: 32,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
