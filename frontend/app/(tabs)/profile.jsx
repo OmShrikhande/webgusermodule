@@ -25,7 +25,10 @@ import {
   LogoutButton,
 } from '@/components/profile';
 
-const { debuggerHost } = Constants.manifest || {};
+// Use expoConfig instead of manifest
+const { debuggerHost } = Constants.expoConfig?.hostUri
+  ? { debuggerHost: Constants.expoConfig.hostUri }
+  : { debuggerHost: undefined };
 const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
 const API_URL = `http://${localIP}:5000`;
 

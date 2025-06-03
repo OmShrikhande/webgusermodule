@@ -16,6 +16,7 @@ import QuickStats from '../../components/home/QuickStats';
 import UpcomingDeadlines from '../../components/home/UpcomingDeadlines';
 import AssignedTasks from '../../components/home/AssignedTasks';
 import RecentActivity from '../../components/home/RecentActivity';
+import Constants from 'expo-constants';
 
 const LOCATION_TASK_NAME = 'background-location-task';
 const OFFICE_LOCATION = {
@@ -55,7 +56,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       return;
     }
     const location = locations[0];
-    fetch('http://192.168.1.6:5000/api/store-location', {
+    fetch(`${API_URL}/api/store-location`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -208,7 +209,7 @@ const Home = () => {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
 
-      const response = await axios.get('http://192.168.1.6:5000/api/profile', {
+      const response = await axios.get(`${API_URL}/api/profile`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -316,7 +317,7 @@ const Home = () => {
       if (token && userId) {
         try {
           const response = await axios.post(
-            'http://192.168.1.6:5000/api/store-location',
+            '${API_URL}/api/store-location',
             {
               userId,
               location: { latitude, longitude },
@@ -348,7 +349,7 @@ const Home = () => {
               try {
                 // Call the alert-out-of-range endpoint to save the alert
                 await axios.post(
-                  'http://192.168.1.6:5000/api/alert-out-of-range',
+                  '${API_URL}/api/alert-out-of-range',
                   {
                     userId,
                     location: { latitude, longitude },
@@ -438,11 +439,18 @@ const Home = () => {
     
     // If it's a relative path, prepend the server URL
     if (profileImage.startsWith('/uploads/')) {
-      return `http://192.168.1.6:5000${profileImage}`;
+      return `${API_URL}${profileImage}`;
     }
     
     return profileImage;
   };
+
+  // Get the local IP address automatically from Expo
+const { debuggerHost } = Constants.expoConfig?.hostUri
+  ? { debuggerHost: Constants.expoConfig.hostUri }
+  : { debuggerHost: undefined };
+const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
+const API_URL = `http://${localIP}:5000`;
 
   if (!userData) {
     return (

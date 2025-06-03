@@ -20,8 +20,16 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import Constants from 'expo-constants';
 
 const { width, height } = Dimensions.get('window');
+
+// Dynamically get local IP for API URL (Expo SDK 49+)
+const { debuggerHost } = Constants.expoConfig?.hostUri
+  ? { debuggerHost: Constants.expoConfig.hostUri }
+  : { debuggerHost: undefined };
+const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
+const API_URL = `http://${localIP}:5000`;
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -134,7 +142,7 @@ export default function Login() {
   const checkUserProfile = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const response = await axios.get('http://192.168.1.6:5000/api/profile', {
+      const response = await axios.get(`${API_URL}/api/profile`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -186,7 +194,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://192.168.1.6:5000/api/admin/login', {
+      const response = await axios.post(`${API_URL}/api/admin/login`, {
         email,
         password,
         location: userLocation,
