@@ -9,7 +9,7 @@ const visitLocationSchema = new mongoose.Schema({
     location: {
         address: { 
             type: String, 
-            required: true 
+            required: false 
         },
         latitude: { 
             type: Number 

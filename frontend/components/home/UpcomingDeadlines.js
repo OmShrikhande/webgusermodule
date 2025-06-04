@@ -10,7 +10,7 @@ const UpcomingDeadlines = ({ deadlines, styles, getPriorityColor }) => (
       </TouchableOpacity>
     </View>
     {deadlines.map((deadline) => (
-      <View key={deadline.id} style={styles.deadlineItem}>
+      <View key={deadline.id || deadline._id || deadline.title} style={styles.deadlineItem}>
         <View style={styles.deadlineInfo}>
           <Text style={styles.deadlineTitle}>{deadline.title}</Text>
           <Text style={styles.deadlineDate}>Due: {deadline.date}</Text>

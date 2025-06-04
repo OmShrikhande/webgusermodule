@@ -47,6 +47,8 @@ export default function NotificationsScreen() {
         const storedUserId = await AsyncStorage.getItem('userId');
         if (storedUserId) {
           setUserId(storedUserId);
+          console.log('User ID retrieved:', storedUserId);
+          console.log('this is the ip of the laptop: ',API_URL);
         }
       } catch (error) {
         console.error('Error retrieving user ID:', error);

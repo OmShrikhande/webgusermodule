@@ -404,33 +404,35 @@ const Home = () => {
   return () => clearInterval(interval);
 }, []);
 
-  const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
-      case 'present':
-        return '#4CAF50';
-      case 'absent':
-        return '#F44336';
-      case 'on leave':
-        return '#2196F3';
-      case 'half day':
-        return '#FF9800';
-      default:
-        return '#9E9E9E';
-    }
-  };
+const getStatusColor = (status) => {
+  if (!status || typeof status !== 'string') return '#9E9E9E';
+  switch (status.toLowerCase()) {
+    case 'present':
+      return '#4CAF50';
+    case 'absent':
+      return '#F44336';
+    case 'on leave':
+      return '#2196F3';
+    case 'half day':
+      return '#FF9800';
+    default:
+      return '#9E9E9E';
+  }
+};
 
-  const getPriorityColor = (priority) => {
-    switch (priority.toLowerCase()) {
-      case 'high':
-        return '#F44336';
-      case 'medium':
-        return '#FF9800';
-      case 'low':
-        return '#4CAF50';
-      default:
-        return '#9E9E9E';
-    }
-  };
+const getPriorityColor = (priority) => {
+  if (!priority || typeof priority !== 'string') return '#9E9E9E';
+  switch (priority.toLowerCase()) {
+    case 'high':
+      return '#F44336';
+    case 'medium':
+      return '#FF9800';
+    case 'low':
+      return '#4CAF50';
+    default:
+      return '#9E9E9E';
+  }
+};
 
   const formatTime = (dateString) => {
     if (!dateString) return 'Not available';
