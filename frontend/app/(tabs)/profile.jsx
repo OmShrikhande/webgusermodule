@@ -115,7 +115,12 @@ const Profile = () => {
   };
 
   // Settings toggles
-  const toggleNotifications = () => setNotificationsEnabled((prev) => !prev);
+  const toggleNotifications = async () => {
+    setNotificationsEnabled((prev) => {
+      AsyncStorage.setItem('notificationsEnabled', (!prev).toString());
+      return !prev;
+    });
+  };
 
 
   if (loading) {

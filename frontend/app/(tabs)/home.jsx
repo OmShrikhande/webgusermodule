@@ -358,7 +358,7 @@ const Home = () => {
       if (token && userId) {
         try {
           const response = await axios.post(
-            '${API_URL}/api/store-location',
+            `${API_URL}/api/store-location`,
             {
               userId,
               location: { latitude, longitude },
@@ -378,32 +378,14 @@ const Home = () => {
           });
           
           // Check for geofence breach based on server response
-          if (!isInOffice) {
+          const notificationsEnabled = (await AsyncStorage.getItem('notificationsEnabled')) === 'true';
+
+          if (!isInOffice && notificationsEnabled) {
             // Set alert message and distance for the notification popup
             const message = `You are ${Math.round(distance)}m away from the office. Please return to the office area.`;
             setAlertMessage(message);
             setAlertDistance(Math.round(distance));
             setNotificationVisible(true);
-            
-            // Only save alert if user just crossed the boundary (was in office before)
-            if (wasInOffice) {
-              try {
-                // Call the alert-out-of-range endpoint to save the alert
-                await axios.post(
-                  '${API_URL}/api/alert-out-of-range',
-                  {
-                    userId,
-                    location: { latitude, longitude },
-                  },
-                  {
-                    headers: { Authorization: `Bearer ${token}` },
-                  }
-                );
-                console.log('Geofence crossing alert saved to database');
-              } catch (alertErr) {
-                console.error('Failed to save geofence alert:', alertErr);
-              }
-            }
           }
           
           // Update the wasInOffice state for next check
