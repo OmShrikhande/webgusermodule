@@ -5,9 +5,14 @@ const path = require('path');
 const User = require('../model/usermodel.cjs');
 const Attendance = require('../model/attendanceModel.cjs');
 const { isWithinOfficeRange, calculateDistance } = require('../utils/locationUtils.cjs');
-const { officeLocation, maxAllowedDistance, enforceLocationCheck } = require('../config/locationConfig.cjs');
+const { officeLocation, maxAllowedDistance, attendanceStartTime, attendanceEndTime } = require('../config/locationConfig.cjs');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
+
+// Helper function to get current date and time in IST
+function getISTDate(date = new Date()) {
+  return new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+}
 
 exports.loginUser = async (req, res) => {
   const { email, password, location } = req.body;
@@ -32,13 +37,29 @@ exports.loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
+    const nowUTC = new Date();
+    const nowIST = getISTDate(nowUTC);
+    const today = nowIST.toISOString().split('T')[0];
+
+    // Parse attendance window
+    const [startHour, startMinute] = attendanceStartTime.split(':').map(Number);
+    const [endHour, endMinute] = attendanceEndTime.split(':').map(Number);
+
+    const attendanceStart = new Date(nowIST);
+    attendanceStart.setHours(startHour, startMinute, 0, 0);
+
+    const attendanceEnd = new Date(nowIST);
+    attendanceEnd.setHours(endHour, endMinute, 0, 0);
+
     // Check if attendance already marked for today
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    const existingAttendance = await Attendance.findOne({
+      userId: user._id,
+      date: today,
+    });
 
     let attendanceMessage = '';
-    let attendanceTime = now.toLocaleTimeString();
-    let attendanceDate = now.toLocaleDateString();
+    let attendanceTime = nowIST.toLocaleTimeString();
+    let attendanceDate = nowIST.toLocaleDateString();
     let attendanceStatus = 'absent';
     let isInOffice = false;
     let distance = null;
@@ -63,28 +84,29 @@ exports.loginUser = async (req, res) => {
         officeLocation.longitude,
         maxAllowedDistance
       );
-
+console.log(nowUTC);
       if (isInOffice) {
-        attendanceStatus = 'present';
-        attendanceMessage = 'Attendance marked successfully. You are present at the office.';
+        if (nowIST >= attendanceStart && nowIST <= attendanceEnd) {
+          attendanceStatus = 'present';
+          attendanceMessage = 'Attendance marked as present.';
+        } else if (nowIST > attendanceEnd) {
+          attendanceStatus = 'half day';
+          attendanceMessage = 'Attendance marked as half day (late arrival).';
+        }
       } else {
-        attendanceMessage = `Attendance marked as absent. You are ${distance}m away from office.`;
+        attendanceStatus = 'absent';
+        attendanceMessage = 'Attendance marked as absent (not in office or late).';
       }
     } else {
       attendanceMessage = 'Location not provided. Attendance marked as absent.';
     }
 
-    // Try to find existing attendance for today
-    const existingAttendance = await Attendance.findOne({
-      userId: user._id,
-      date: today,
-    });
-
+    let attendanceRecord;
     if (!existingAttendance) {
       // If no attendance record exists for today, create one
-      const attendance = new Attendance({
+      attendanceRecord = new Attendance({
         userId: user._id,
-        loginTime: now,
+        loginTime: nowUTC, // Always save UTC
         date: today,
         status: attendanceStatus,
         location: {
@@ -94,7 +116,7 @@ exports.loginUser = async (req, res) => {
           distance: distance,
         },
       });
-      await attendance.save();
+      await attendanceRecord.save();
     } else {
       // Attendance already marked for today
       attendanceMessage = 'Attendance already marked for today';
@@ -103,18 +125,21 @@ exports.loginUser = async (req, res) => {
       attendanceStatus = existingAttendance.status;
       isInOffice = existingAttendance.location?.isInOffice || false;
       distance = existingAttendance.location?.distance;
+      attendanceRecord = existingAttendance;
     }
 
     // Update user's last login time
-    await User.findByIdAndUpdate(user._id, { lastLoginTime: now });
+    await User.findByIdAndUpdate(user._id, { lastLoginTime: nowUTC });
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1h' });
 
+    // Use attendanceRecord for IST time
+    const istLoginTime = getISTDate(attendanceRecord.loginTime);
     res.json({
       token,
       message: attendanceMessage,
-      attendanceTime: attendanceTime,
-      attendanceDate: attendanceDate,
+      attendanceTime: istLoginTime.toLocaleTimeString('en-IN', { hour12: false }),
+      attendanceDate: istLoginTime.toLocaleDateString('en-IN'),
       attendanceStatus: attendanceStatus,
       location: {
         isInOffice: isInOffice,
@@ -125,7 +150,7 @@ exports.loginUser = async (req, res) => {
         email: user.email,
         name: user.name,
         profileImage: user.profileImage,
-        lastLoginTime: now,
+        lastLoginTime: nowUTC,
       },
     });
   } catch (err) {
@@ -165,9 +190,24 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Check if attendance already marked for today
-    const now = new Date();
+    const now = getISTDate();
     const today = now.toISOString().split('T')[0];
+
+    // Parse attendance window
+    const [startHour, startMinute] = attendanceStartTime.split(':').map(Number);
+    const [endHour, endMinute] = attendanceEndTime.split(':').map(Number);
+
+    const attendanceStart = new Date(now);
+    attendanceStart.setHours(startHour, startMinute, 0, 0);
+
+    const attendanceEnd = new Date(now);
+    attendanceEnd.setHours(endHour, endMinute, 0, 0);
+
+    // Check if attendance already marked for today
+    const existingAttendance = await Attendance.findOne({
+      userId: user._id,
+      date: today,
+    });
 
     let attendanceMessage = '';
     let attendanceTime = now.toLocaleTimeString();
@@ -198,20 +238,20 @@ exports.login = async (req, res) => {
       );
 
       if (isInOffice) {
-        attendanceStatus = 'present';
-        attendanceMessage = 'Login successful. Attendance marked as present.';
+        if (now >= attendanceStart && now <= attendanceEnd) {
+          attendanceStatus = 'present';
+          attendanceMessage = 'Login successful. Attendance marked as present.';
+        } else {
+          attendanceStatus = 'half day';
+          attendanceMessage = 'Login successful. Attendance marked as half day (late arrival).';
+        }
       } else {
+        attendanceStatus = 'absent';
         attendanceMessage = `Login successful. Attendance marked as absent. You are ${distance}m away from office.`;
       }
     } else {
       attendanceMessage = 'Login successful. Location not provided. Attendance marked as absent.';
     }
-
-    // Try to find existing attendance for today
-    const existingAttendance = await Attendance.findOne({
-      userId: user._id,
-      date: today,
-    });
 
     if (!existingAttendance) {
       // If no attendance record exists for today, create one

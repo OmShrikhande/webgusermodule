@@ -32,11 +32,22 @@ const UserHeader = ({ userData, latestAttendance, fadeAnim, slideAnim, getImageU
           <View
             style={[
               styles.statusIndicator,
-              { backgroundColor: latestAttendance?.status === 'present' ? '#4CAF50' : '#F44336' },
+              {
+                backgroundColor:
+                  latestAttendance?.status === 'present'
+                    ? '#4CAF50'
+                    : latestAttendance?.status === 'half day'
+                      ? '#FFC107'
+                      : '#F44336'
+              },
             ]}
           />
           <Text style={styles.statusText}>
-            {latestAttendance?.status === 'present' ? 'Present' : 'Absent'}
+            {latestAttendance?.status === 'present'
+              ? 'Present'
+              : latestAttendance?.status === 'half day'
+                ? 'Half Day'
+                : 'Absent'}
           </Text>
         </View>
       </View>

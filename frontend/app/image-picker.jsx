@@ -19,8 +19,23 @@ import { router, useRouter, Link } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Colors } from '@/constants/Colors';
+import Constants from 'expo-constants';
 
 const { width, height } = Dimensions.get('window');
+
+// Dynamically get local IP for API URL (Expo SDK 49+)
+const getApiBaseUrl = () => {
+  // Try to get debuggerHost from Expo constants
+  const debuggerHost = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
+  if (debuggerHost) {
+    const ip = debuggerHost.split(':')[0];
+    return `http://${ip}:5000`;
+  }
+  // Fallback to default (you can customize this)
+  return 'http://192.168.137.1:5000';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export default function ImagePickerScreen() {
   const [selectedImage, setSelectedImage] = useState(null);
@@ -178,7 +193,7 @@ export default function ImagePickerScreen() {
 
       console.log('Uploading image...');
       const response = await axios.put(
-        'http://192.168.137.1:5000/api/profile',
+        `${API_BASE_URL}/api/profile`,
         {
           name: userName.trim(),
           profileImage: base64Image,
