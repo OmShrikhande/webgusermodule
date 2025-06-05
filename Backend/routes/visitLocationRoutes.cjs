@@ -192,4 +192,132 @@ router.post('/visit-locations', authenticateToken, async (req, res) => {
     }
 });
 
+// Auto-complete visit locations based on user proximity
+router.post('/check-visit-locations', authenticateToken, async (req, res) => {
+    try {
+        const { userId, location } = req.body;
+        
+        console.log('Check visit locations request:', { 
+            userId, 
+            location, 
+            userFromToken: req.user?.userId 
+        });
+        
+        // Validate userId
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'User ID is required'
+            });
+        }
+        
+        // Validate location
+        if (!location || !location.latitude || !location.longitude) {
+            return res.status(400).json({
+                success: false,
+                message: 'Location coordinates are required'
+            });
+        }
+
+        // Ensure the user can only check their own visit locations
+        if (req.user.userId !== userId) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied: Cannot check visit locations for other users'
+            });
+        }
+
+        // Find all pending or in-progress visit locations for this user
+        const pendingVisits = await VisitLocation.find({ 
+            userId: userId,
+            visitStatus: { $in: ['pending', 'in-progress'] }
+        });
+
+        const completedVisits = [];
+        const autoStartedVisits = [];
+
+        for (const visit of pendingVisits) {
+            if (visit.location && visit.location.latitude && visit.location.longitude) {
+                const distance = calculateDistance(
+                    location.latitude,
+                    location.longitude,
+                    visit.location.latitude,
+                    visit.location.longitude
+                );
+
+                // If user is within 50 meters of the assigned location
+                if (distance <= maxAllowedDistance) {
+                    if (visit.visitStatus === 'pending') {
+                        // Auto-start the visit
+                        visit.visitStatus = 'in-progress';
+                        visit.visitDate = new Date();
+                        await visit.save();
+                        autoStartedVisits.push({
+                            visitId: visit._id,
+                            address: visit.location.address,
+                            distance: Math.round(distance),
+                            action: 'started'
+                        });
+                    } else if (visit.visitStatus === 'in-progress') {
+                        // Auto-complete the visit
+                        visit.visitStatus = 'completed';
+                        visit.visitDate = new Date();
+                        await visit.save();
+                        
+                        // Create completion notification
+                        const notification = new Notification({
+                            userId: userId,
+                            message: `Visit to ${visit.location.address} completed automatically`,
+                            timestamp: new Date()
+                        });
+                        await notification.save();
+                        
+                        completedVisits.push({
+                            visitId: visit._id,
+                            address: visit.location.address,
+                            distance: Math.round(distance),
+                            action: 'completed'
+                        });
+                    }
+                }
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            completedVisits,
+            autoStartedVisits,
+            message: `${completedVisits.length} visits completed, ${autoStartedVisits.length} visits started automatically`
+        });
+
+    } catch (error) {
+        console.error('Error checking visit locations:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error checking visit locations',
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint to verify authentication
+router.get('/test-auth', authenticateToken, async (req, res) => {
+    try {
+        console.log('Test auth - User object:', req.user);
+        return res.status(200).json({
+            success: true,
+            message: 'Authentication successful',
+            user: req.user,
+            userId: req.user.userId,
+            tokenFormat: req.user.id ? 'old' : 'new'
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: 'Test failed',
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;

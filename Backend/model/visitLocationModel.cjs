@@ -44,7 +44,30 @@ const visitLocationSchema = new mongoose.Schema({
     isRead: { 
         type: Boolean, 
         default: false 
-    }
+    },
+    images: [{
+        url: { 
+            type: String, 
+            required: true 
+        },
+        type: { 
+            type: String, 
+            enum: ['start', 'complete'],
+            required: true 
+        },
+        timestamp: { 
+            type: Date, 
+            default: Date.now 
+        },
+        location: {
+            latitude: { 
+                type: Number 
+            },
+            longitude: { 
+                type: Number 
+            }
+        }
+    }]
 }, { 
     collection: 'visitlocations',
     timestamps: true

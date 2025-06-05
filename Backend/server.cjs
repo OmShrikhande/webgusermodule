@@ -7,6 +7,7 @@ const authRoutes = require('./routes/authroutes.cjs');
 const notificationRoutes = require('./routes/notificationRoutes.cjs');
 const taskRoutes = require('./routes/taskRoutes.cjs');
 const visitLocationRoutes = require('./routes/visitLocationRoutes.cjs');
+const imageUploadRoutes = require('./routes/imageUploadRoutes.cjs');
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api', authRoutes);
 app.use('/api', notificationRoutes);
 app.use('/api', taskRoutes);
 app.use('/api', visitLocationRoutes);
+app.use('/api', imageUploadRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

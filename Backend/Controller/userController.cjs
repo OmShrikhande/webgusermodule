@@ -131,7 +131,7 @@ console.log(nowUTC);
     // Update user's last login time
     await User.findByIdAndUpdate(user._id, { lastLoginTime: nowUTC });
 
-    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ userId: user._id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
 
     // Use attendanceRecord for IST time
     const istLoginTime = getISTDate(attendanceRecord.loginTime);

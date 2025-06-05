@@ -10,7 +10,8 @@ import {
   ScrollView,
   Alert,
   Dimensions,
-  Platform 
+  Platform,
+  Image 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,8 +21,10 @@ import { useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
+import { pickImageForStatus, openCamera, openGallery } from '@/utils/imagePickerUtils';
 
 // Get the local IP address automatically from Expo
 const { debuggerHost } = Constants.expoConfig?.hostUri
@@ -40,6 +43,7 @@ export default function NotificationsScreen() {
   const [showDetails, setShowDetails] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [mapRegion, setMapRegion] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     const getUserId = async () => {
@@ -133,11 +137,37 @@ export default function NotificationsScreen() {
 
   const updateVisitLocationStatus = async (visitLocationId, newStatus, userFeedback = '') => {
     try {
+      // For start and complete actions, optionally capture image
+      if (newStatus === 'in-progress' || newStatus === 'completed') {
+        const imageType = newStatus === 'in-progress' ? 'start' : 'complete';
+        
+        // Ask user if they want to add an image
+        const shouldAddImage = await new Promise((resolve) => {
+          Alert.alert(
+            `${imageType === 'start' ? 'Start Visit' : 'Complete Visit'}`,
+            'Would you like to add an image for this visit?',
+            [
+              { text: 'Skip', onPress: () => resolve(false) },
+              { text: 'Add Image', onPress: () => resolve(true) }
+            ]
+          );
+        });
+
+        if (shouldAddImage) {
+          const imageAsset = await pickImageForStatus(imageType);
+          if (imageAsset) {
+            // Upload image if selected
+            await uploadImage(imageAsset.uri, visitLocationId, imageType);
+          }
+        }
+      }
+
       const token = await AsyncStorage.getItem('token');
       let body = { visitStatus: newStatus, userFeedback };
       if (newStatus === 'completed' && userLocation) {
         body.userLocation = userLocation;
       }
+      
       const response = await axios.put(`${API_URL}/api/visit-locations/${visitLocationId}/status`, 
         body,
         {
@@ -161,11 +191,28 @@ export default function NotificationsScreen() {
         }
         
         Alert.alert('Success', `Visit status updated to ${newStatus}`);
+        
+        // Refresh the visit locations to get updated data with images
+        fetchVisitLocations();
       }
     } catch (error) {
       console.error('Error updating visit location status:', error);
       Alert.alert('Error', 'Failed to update visit location status');
     }
+  };
+
+  const pickImageForStatus = async (imageType) => {
+    return new Promise((resolve) => {
+      Alert.alert(
+        `${imageType === 'start' ? 'Start Visit' : 'Complete Visit'}`,
+        `Please capture an image to ${imageType} the visit.`,
+        [
+          { text: 'Camera', onPress: async () => resolve(await openCamera()) },
+          { text: 'Gallery', onPress: async () => resolve(await openGallery()) },
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) }
+        ]
+      );
+    });
   };
 
   const getStatusColor = (status) => {
@@ -217,6 +264,125 @@ export default function NotificationsScreen() {
     } catch (error) {
       console.error('Error getting current location:', error);
       Alert.alert('Error', 'Failed to get current location');
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      // Request camera permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
+        return null;
+      }
+
+      // Show action sheet to choose between camera and gallery
+      Alert.alert(
+        'Select Image',
+        'Choose an option',
+        [
+          { text: 'Camera', onPress: () => openCamera() },
+          { text: 'Gallery', onPress: () => openGallery() },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    } catch (error) {
+      console.error('Error requesting camera permission:', error);
+      Alert.alert('Error', 'Failed to request camera permission');
+    }
+  };
+
+  const openCamera = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        return result.assets[0];
+      }
+      return null;
+    } catch (error) {
+      console.error('Error opening camera:', error);
+      Alert.alert('Error', 'Failed to open camera');
+      return null;
+    }
+  };
+
+  const openGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        return result.assets[0];
+      }
+      return null;
+    } catch (error) {
+      console.error('Error opening gallery:', error);
+      Alert.alert('Error', 'Failed to open gallery');
+      return null;
+    }
+  };
+
+  const uploadImage = async (imageUri, visitLocationId, imageType) => {
+    try {
+      setUploadingImage(true);
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        Alert.alert('Error', 'Authentication required');
+        return false;
+      }
+
+      // Get current location
+      const currentLocation = await getCurrentLocation();
+      
+      // Create form data
+      const formData = new FormData();
+      formData.append('image', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: `${imageType}_${Date.now()}.jpg`,
+      });
+      formData.append('imageType', imageType); // 'start' or 'complete'
+      formData.append('timestamp', new Date().toISOString());
+      
+      if (currentLocation) {
+        formData.append('location', JSON.stringify(currentLocation));
+      }
+
+      const response = await axios.post(
+        `${API_URL}/api/visit-locations/${visitLocationId}/upload-image`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        Alert.alert('Success', 'Image uploaded successfully');
+        return true;
+      } else {
+        Alert.alert('Error', 'Failed to upload image');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      Alert.alert('Error', 'Failed to upload image');
+      return false;
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -446,17 +612,51 @@ export default function NotificationsScreen() {
           </View>
         )}
         
+        {/* Images Section */}
+        {(selectedLocation?.images && selectedLocation.images.length > 0) && (
+          <View style={styles.detailSection}>
+            <Text style={styles.detailSectionTitle}>Visit Images</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesContainer}>
+              {selectedLocation.images.map((image, index) => (
+                <View key={index} style={styles.imageItem}>
+                  <Image source={{ uri: `${API_URL}${image.url}` }} style={styles.visitImage} />
+                  <View style={styles.imageInfo}>
+                    <Text style={styles.imageType}>
+                      {image.type === 'start' ? '🟢 Start' : '🔴 Complete'}
+                    </Text>
+                    <Text style={styles.imageTimestamp}>
+                      {formatDate(image.timestamp)}
+                    </Text>
+                    {image.location && (
+                      <Text style={styles.imageLocation}>
+                        📍 {image.location.latitude.toFixed(6)}, {image.location.longitude.toFixed(6)}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+        
         {selectedLocation?.visitStatus !== 'completed' && selectedLocation?.visitStatus !== 'cancelled' && (
           <View style={styles.actionSection}>
             <Text style={styles.detailSectionTitle}>Actions</Text>
             <View style={styles.actionButtons}>
               {selectedLocation?.visitStatus === 'pending' && (
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.startButton]}
+                  style={[styles.actionButton, styles.startButton, uploadingImage && styles.disabledButton]}
                   onPress={() => updateVisitLocationStatus(selectedLocation._id, 'in-progress')}
+                  disabled={uploadingImage}
                 >
-                  <Ionicons name="play" size={16} color="#fff" />
-                  <Text style={styles.actionButtonText}>Start Visit</Text>
+                  {uploadingImage ? (
+                    <Text style={styles.actionButtonText}>Uploading...</Text>
+                  ) : (
+                    <>
+                      <Ionicons name="camera" size={16} color="#fff" />
+                      <Text style={styles.actionButtonText}>Start Visit</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
               )}
               
@@ -472,11 +672,18 @@ export default function NotificationsScreen() {
                   selectedLocation.location.longitude
                 ) <= 50 && (
                   <TouchableOpacity
-                    style={[styles.actionButton, styles.completeButton]}
+                    style={[styles.actionButton, styles.completeButton, uploadingImage && styles.disabledButton]}
                     onPress={() => updateVisitLocationStatus(selectedLocation._id, 'completed')}
+                    disabled={uploadingImage}
                   >
-                    <Ionicons name="checkmark" size={16} color="#fff" />
-                    <Text style={styles.actionButtonText}>Complete</Text>
+                    {uploadingImage ? (
+                      <Text style={styles.actionButtonText}>Uploading...</Text>
+                    ) : (
+                      <>
+                        <Ionicons name="camera" size={16} color="#fff" />
+                        <Text style={styles.actionButtonText}>Complete</Text>
+                      </>
+                    )}
                   </TouchableOpacity>
                 )
               )}
@@ -917,5 +1124,43 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '500',
     marginLeft: 6,
+  },
+  // Image styles
+  imagesContainer: {
+    flexDirection: 'row',
+  },
+  imageItem: {
+    marginRight: 15,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 8,
+    width: 200,
+  },
+  visitImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  imageInfo: {
+    alignItems: 'flex-start',
+  },
+  imageType: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 2,
+  },
+  imageTimestamp: {
+    fontSize: 10,
+    color: '#666',
+    marginBottom: 2,
+  },
+  imageLocation: {
+    fontSize: 10,
+    color: '#888',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

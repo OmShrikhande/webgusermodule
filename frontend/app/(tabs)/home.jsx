@@ -63,17 +63,66 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       return;
     }
     const location = locations[0];
+    const userLocation = {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    };
+    
+    // Store location for attendance tracking
     fetch(`${API_URL}/api/store-location`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId,
-        location: {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        },
+        location: userLocation,
       }),
     });
+    
+    // Check for visit location auto-completion in background
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (token && userId) {
+        console.log('Background check - Token exists:', !!token, 'UserId:', userId);
+        
+        // First test if token is valid
+        const testResponse = await fetch(`${API_URL}/api/test-auth`, {
+          method: 'GET',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (testResponse.ok) {
+          // Token is valid, proceed with visit location check
+          const response = await fetch(`${API_URL}/api/check-visit-locations`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              userId,
+              location: userLocation,
+            }),
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Background visit check failed:', response.status, response.statusText, errorText);
+          } else {
+            const data = await response.json();
+            console.log('Background visit check result:', data);
+          }
+        } else {
+          console.error('Background check - Token validation failed:', testResponse.status);
+        }
+      } else {
+        console.warn('Background check skipped - missing token or userId');
+      }
+    } catch (err) {
+      console.error('Background visit check error:', err);
+    }
   }
 });
 
@@ -258,6 +307,134 @@ const Home = () => {
     }
   };
 
+  // Validate token before making requests
+  const validateToken = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        console.warn('No token found in storage');
+        return null;
+      }
+
+      // Test the token with a simple endpoint
+      const response = await axios.get(`${API_URL}/api/test-auth`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.data.success) {
+        console.log('Token validation successful');
+        return token;
+      } else {
+        console.error('Token validation failed');
+        return null;
+      }
+    } catch (error) {
+      console.error('Token validation error:', error.response?.status, error.response?.data);
+      if (error.response?.status === 403) {
+        console.error('Token expired or invalid - user may need to re-login');
+        // Clear invalid token
+        await AsyncStorage.removeItem('token');
+        // Optionally redirect to login
+        // router.replace('/login');
+      }
+      return null;
+    }
+  };
+
+  // Check and auto-complete visit locations based on user proximity
+  const checkVisitLocations = async (userId, userLocation, token) => {
+    try {
+      // Add validation before making the request
+      if (!userId || !token) {
+        console.warn('Missing userId or token for visit location check');
+        return;
+      }
+
+      if (!userLocation || !userLocation.latitude || !userLocation.longitude) {
+        console.warn('Invalid user location for visit location check');
+        return;
+      }
+
+      console.log('Checking visit locations with:', { 
+        userId, 
+        location: userLocation, 
+        tokenExists: !!token,
+        tokenLength: token ? token.length : 0
+      });
+
+      const response = await axios.post(
+        `${API_URL}/api/check-visit-locations`,
+        {
+          userId,
+          location: userLocation,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (response.data.success) {
+        const { completedVisits, autoStartedVisits } = response.data;
+        
+        // Show notifications for auto-completed visits
+        if (completedVisits.length > 0) {
+          const completedMessage = completedVisits.length === 1 
+            ? `✅ Visit to "${completedVisits[0].address}" completed automatically! Distance: ${completedVisits[0].distance}m`
+            : `✅ ${completedVisits.length} visits completed automatically!`;
+          
+          setAlertMessage(completedMessage);
+          setNotificationVisible(true);
+          
+          completedVisits.forEach(visit => {
+            console.log(`Auto-completed visit: ${visit.address} (${visit.distance}m)`);
+          });
+          
+          // Refresh visit locations to update the UI
+          fetchVisitLocations();
+          fetchUnreadTasksCount();
+        }
+
+        // Show notifications for auto-started visits
+        if (autoStartedVisits.length > 0) {
+          const startedMessage = autoStartedVisits.length === 1 
+            ? `🚀 Visit to "${autoStartedVisits[0].address}" started automatically! Distance: ${autoStartedVisits[0].distance}m`
+            : `🚀 ${autoStartedVisits.length} visits started automatically!`;
+          
+          // Only show start notification if no completion notification
+          if (completedVisits.length === 0) {
+            setAlertMessage(startedMessage);
+            setNotificationVisible(true);
+          }
+          
+          autoStartedVisits.forEach(visit => {
+            console.log(`Auto-started visit: ${visit.address} (${visit.distance}m)`);
+          });
+          
+          // Refresh visit locations to update the UI
+          fetchVisitLocations();
+        }
+      }
+    } catch (error) {
+      console.error('Error checking visit locations:', error);
+      
+      // Detailed error logging
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response data:', error.response.data);
+        console.error('Response headers:', error.response.headers);
+        
+        if (error.response.status === 403) {
+          console.error('Authentication failed - token may be invalid or expired');
+          // Optionally refresh token or redirect to login
+        }
+      } else if (error.request) {
+        console.error('No response received:', error.request);
+      } else {
+        console.error('Error setting up request:', error.message);
+      }
+    }
+  };
+
   // Handle notification bell press
   const handleNotificationPress = () => {
     router.push('/notifications');
@@ -312,10 +489,10 @@ const Home = () => {
         await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
           accuracy: Location.Accuracy.High,
           distanceInterval: 10, // Update every 10 meters
-          timeInterval: 60000, // Update every minute
+          timeInterval: 30000, // Update every 30 seconds
           foregroundService: {
-            notificationTitle: 'Attendance Tracking',
-            notificationBody: 'Monitoring your location for attendance.',
+            notificationTitle: 'Location Tracking',
+            notificationBody: 'Monitoring your location for attendance and visit completion.',
           },
         });
       } catch (error) {
@@ -377,6 +554,18 @@ const Home = () => {
             clientDistance: Math.round(distance)
           });
           
+          // Check for visit location auto-completion
+          try {
+            const validToken = await validateToken();
+            if (validToken) {
+              await checkVisitLocations(userId, { latitude, longitude }, validToken);
+            } else {
+              console.warn('Skipping visit location check - invalid token');
+            }
+          } catch (visitError) {
+            console.error('Visit location check failed:', visitError);
+          }
+          
           // Check for geofence breach based on server response
           const notificationsEnabled = (await AsyncStorage.getItem('notificationsEnabled')) === 'true';
 
@@ -399,7 +588,7 @@ const Home = () => {
     } catch (error) {
       console.error('Foreground location error:', error);
     }
-  }, 60000); // Check every minute
+  }, 30000); // Check every 30 seconds for better responsiveness
 
   return () => clearInterval(interval);
 }, []);
