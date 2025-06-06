@@ -46,10 +46,7 @@ const visitLocationSchema = new mongoose.Schema({
         default: false 
     },
     images: [{
-        url: { 
-            type: String, 
-            required: true 
-        },
+       data:Buffer,
         type: { 
             type: String, 
             enum: ['start', 'complete'],

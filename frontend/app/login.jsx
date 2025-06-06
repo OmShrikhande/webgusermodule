@@ -206,7 +206,12 @@ export default function Login() {
       await AsyncStorage.setItem('token', token);
       // Since /api/admin/login doesn't return user.id, decode JWT to get id
       const decodedToken = JSON.parse(atob(token.split('.')[1]));
-      await AsyncStorage.setItem('userId', decodedToken.id);
+      const userId = decodedToken.id || decodedToken.userId;
+      if (userId) {
+        await AsyncStorage.setItem('userId', userId);
+      } else {
+        await AsyncStorage.removeItem('userId');
+      }
 
       // Set attendance information
       if (attendanceTime && attendanceDate) {
