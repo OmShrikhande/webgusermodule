@@ -44,6 +44,7 @@ export default function NotificationsScreen() {
   const [userLocation, setUserLocation] = useState(null);
   const [mapRegion, setMapRegion] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [autoCompletionShown, setAutoCompletionShown] = useState(new Set());
 
   useEffect(() => {
     const getUserId = async () => {
@@ -114,6 +115,24 @@ export default function NotificationsScreen() {
     }, [userId])
   );
 
+  // Periodically check location for auto-completion
+  useEffect(() => {
+    let locationInterval;
+    
+    if (userId && visitLocations.length > 0) {
+      // Check location every 30 seconds when app is focused
+      locationInterval = setInterval(() => {
+        getCurrentLocation();
+      }, 30000);
+    }
+
+    return () => {
+      if (locationInterval) {
+        clearInterval(locationInterval);
+      }
+    };
+  }, [userId, visitLocations]);
+
   const markVisitLocationAsRead = async (visitLocationId) => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -137,15 +156,100 @@ export default function NotificationsScreen() {
 
   const updateVisitLocationStatus = async (visitLocationId, newStatus, userFeedback = '') => {
     try {
-      // For start and complete actions, optionally capture image
-      if (newStatus === 'in-progress' || newStatus === 'completed') {
-        const imageType = newStatus === 'in-progress' ? 'start' : 'complete';
-        
-        // Ask user if they want to add an image
+      // Get current location first for validation
+      const currentLocation = await getCurrentLocation();
+      if (!currentLocation) {
+        Alert.alert('Error', 'Unable to get your current location. Please enable location services.');
+        return;
+      }
+
+      // Find the visit location
+      const visitLocation = visitLocations.find(loc => loc._id === visitLocationId);
+      if (!visitLocation) {
+        Alert.alert('Error', 'Visit location not found');
+        return;
+      }
+
+      // For completion, validate location proximity (within 50 meters)
+      if (newStatus === 'completed') {
+        // Check if task is already completed
+        if (visitLocation.visitStatus === 'completed') {
+          Alert.alert('Task Already Completed', 'This task has already been completed.');
+          return;
+        }
+
+        if (!visitLocation.location?.latitude || !visitLocation.location?.longitude) {
+          Alert.alert('Error', 'Visit location coordinates not available');
+          return;
+        }
+
+        const distance = calculateDistance(
+          currentLocation.latitude,
+          currentLocation.longitude,
+          visitLocation.location.latitude,
+          visitLocation.location.longitude
+        );
+
+        if (distance > 50) {
+          Alert.alert(
+            'Location Required', 
+            `You must be within 50 meters of the assigned location to complete this task. You are currently ${Math.round(distance)}m away.`
+          );
+          return;
+        }
+
+        // For completion, image is mandatory
+        const imageAsset = await new Promise((resolve) => {
+          Alert.alert(
+            'Complete Visit',
+            'An image is required to complete this visit. Please capture an image.',
+            [
+              { text: 'Camera', onPress: async () => resolve(await openCamera()) },
+              { text: 'Gallery', onPress: async () => resolve(await openGallery()) },
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) }
+            ]
+          );
+        });
+
+        if (!imageAsset) {
+          Alert.alert('Error', 'Image is required to complete the visit');
+          return;
+        }
+
+        // Upload the completion image
+        const imageUploaded = await uploadImage(imageAsset.uri, visitLocationId, 'complete');
+        if (!imageUploaded) {
+          Alert.alert('Error', 'Failed to upload image. Task cannot be completed.');
+          return;
+        }
+
+        // If task was pending and user is completing directly, auto-start first
+        if (visitLocation.visitStatus === 'pending') {
+          // Ask for start image as well
+          const startImageAsset = await new Promise((resolve) => {
+            Alert.alert(
+              'Start Visit Image',
+              'Since you are completing the task directly, please also provide a start image.',
+              [
+                { text: 'Camera', onPress: async () => resolve(await openCamera()) },
+                { text: 'Gallery', onPress: async () => resolve(await openGallery()) },
+                { text: 'Skip Start Image', onPress: () => resolve(null) }
+              ]
+            );
+          });
+
+          if (startImageAsset) {
+            await uploadImage(startImageAsset.uri, visitLocationId, 'start');
+          }
+        }
+      }
+
+      // For start action, optionally capture image
+      if (newStatus === 'in-progress') {
         const shouldAddImage = await new Promise((resolve) => {
           Alert.alert(
-            `${imageType === 'start' ? 'Start Visit' : 'Complete Visit'}`,
-            'Would you like to add an image for this visit?',
+            'Start Visit',
+            'Would you like to add an image to mark the start of this visit?',
             [
               { text: 'Skip', onPress: () => resolve(false) },
               { text: 'Add Image', onPress: () => resolve(true) }
@@ -154,18 +258,17 @@ export default function NotificationsScreen() {
         });
 
         if (shouldAddImage) {
-          const imageAsset = await pickImageForStatus(imageType);
+          const imageAsset = await pickImageForStatus('start');
           if (imageAsset) {
-            // Upload image if selected
-            await uploadImage(imageAsset.uri, visitLocationId, imageType);
+            await uploadImage(imageAsset.uri, visitLocationId, 'start');
           }
         }
       }
 
       const token = await AsyncStorage.getItem('token');
       let body = { visitStatus: newStatus, userFeedback };
-      if (newStatus === 'completed' && userLocation) {
-        body.userLocation = userLocation;
+      if (newStatus === 'completed' && currentLocation) {
+        body.userLocation = currentLocation;
       }
       
       const response = await axios.put(`${API_URL}/api/visit-locations/${visitLocationId}/status`, 
@@ -219,6 +322,8 @@ export default function NotificationsScreen() {
     switch (status) {
       case 'pending':
         return '#FF9800';
+      case 'reached':
+        return '#9C27B0'; // Purple color for reached status
       case 'in-progress':
         return '#2196F3';
       case 'completed':
@@ -260,10 +365,111 @@ export default function NotificationsScreen() {
       };
       
       setUserLocation(currentLocation);
+      
+      // Check if user reached any task location
+      checkForLocationReached(currentLocation);
+      
       return currentLocation;
     } catch (error) {
       console.error('Error getting current location:', error);
       Alert.alert('Error', 'Failed to get current location');
+    }
+  };
+
+  const checkForLocationReached = async (currentLocation) => {
+    if (!currentLocation || !visitLocations.length) return;
+
+    // Check each pending task to see if user is at the location
+    for (const visitLocation of visitLocations) {
+      if (visitLocation.visitStatus === 'pending' && 
+          visitLocation.location?.latitude && 
+          visitLocation.location?.longitude &&
+          !autoCompletionShown.has(visitLocation._id)) {
+        
+        const distance = calculateDistance(
+          currentLocation.latitude,
+          currentLocation.longitude,
+          visitLocation.location.latitude,
+          visitLocation.location.longitude
+        );
+
+        // If user is within 50 meters of a pending task location
+        if (distance <= 50) {
+          console.log(`🎯 User reached location! Distance: ${Math.round(distance)}m`);
+          console.log(`📍 Auto-completing task: ${visitLocation._id}`);
+          
+          // Mark this location as shown to prevent spam
+          setAutoCompletionShown(prev => new Set([...prev, visitLocation._id]));
+          
+          // Automatically complete the task without user interference
+          await autoCompleteTask(visitLocation._id, currentLocation);
+          
+          Alert.alert(
+            'Task Auto-Completed! ✅',
+            `You have reached the location for "${visitLocation.location?.address || 'Visit Location'}". The task has been automatically completed.`,
+            [
+              { text: 'OK', style: 'default' }
+            ]
+          );
+          break; // Only show one alert at a time
+        }
+      }
+    }
+  };
+
+  const autoCompleteTask = async (visitLocationId, currentLocation) => {
+    try {
+      console.log(`🚀 Starting auto-completion for task: ${visitLocationId}`);
+      const token = await AsyncStorage.getItem('token');
+      
+      const response = await axios.put(`${API_URL}/api/visit-locations/${visitLocationId}/status`, 
+        { 
+          visitStatus: 'completed',
+          userLocation: currentLocation,
+          autoCompleted: true,
+          userFeedback: 'Auto-completed when user reached location'
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        console.log(`✅ Task ${visitLocationId} auto-completed successfully in database`);
+        
+        // Update local state
+        setVisitLocations(prevLocations =>
+          prevLocations.map(location =>
+            location._id === visitLocationId ? { 
+              ...location, 
+              visitStatus: 'completed',
+              visitDate: new Date().toISOString(),
+              userFeedback: 'Auto-completed when user reached location',
+              autoCompleted: true
+            } : location
+          )
+        );
+        
+        // Update selected location if it's the same
+        if (selectedLocation && selectedLocation._id === visitLocationId) {
+          setSelectedLocation(prev => ({ 
+            ...prev, 
+            visitStatus: 'completed',
+            visitDate: new Date().toISOString(),
+            userFeedback: 'Auto-completed when user reached location',
+            autoCompleted: true
+          }));
+        }
+
+        console.log(`📱 Local state updated for task: ${visitLocationId}`);
+      } else {
+        console.error(`❌ Failed to auto-complete task: ${response.data.message}`);
+      }
+    } catch (error) {
+      console.error('❌ Error auto-completing task:', error);
+      // Don't show alert to user since this is automatic
     }
   };
 
@@ -642,6 +848,57 @@ export default function NotificationsScreen() {
         {selectedLocation?.visitStatus !== 'completed' && selectedLocation?.visitStatus !== 'cancelled' && (
           <View style={styles.actionSection}>
             <Text style={styles.detailSectionTitle}>Actions</Text>
+            
+            {/* Location Status Info */}
+            {userLocation && selectedLocation.location?.latitude && selectedLocation.location?.longitude && (
+              <View style={styles.locationStatusContainer}>
+                <View style={styles.locationStatusRow}>
+                  <Ionicons 
+                    name={selectedLocation?.visitStatus === 'reached' ? "location-sharp" :
+                         (calculateDistance(
+                           userLocation.latitude,
+                           userLocation.longitude,
+                           selectedLocation.location.latitude,
+                           selectedLocation.location.longitude
+                         ) <= 50 ? "checkmark-circle" : "location")} 
+                    size={16} 
+                    color={selectedLocation?.visitStatus === 'reached' ? "#9C27B0" :
+                          (calculateDistance(
+                            userLocation.latitude,
+                            userLocation.longitude,
+                            selectedLocation.location.latitude,
+                            selectedLocation.location.longitude
+                          ) <= 50 ? "#4CAF50" : "#FF9800")} 
+                  />
+                  <Text style={[styles.locationStatusText, {
+                    color: selectedLocation?.visitStatus === 'reached' ? "#9C27B0" : 
+                           (calculateDistance(
+                             userLocation.latitude,
+                             userLocation.longitude,
+                             selectedLocation.location.latitude,
+                             selectedLocation.location.longitude
+                           ) <= 50 ? "#4CAF50" : "#FF9800")
+                  }]}>
+                    {selectedLocation?.visitStatus === 'reached' ? 
+                      "Location reached - Upload image to complete task" :
+                      (calculateDistance(
+                        userLocation.latitude,
+                        userLocation.longitude,
+                        selectedLocation.location.latitude,
+                        selectedLocation.location.longitude
+                      ) <= 50 ? "Location reached - You can now upload image to complete" : 
+                      `${Math.round(calculateDistance(
+                        userLocation.latitude,
+                        userLocation.longitude,
+                        selectedLocation.location.latitude,
+                        selectedLocation.location.longitude
+                      ))}m away from location`)
+                    }
+                  </Text>
+                </View>
+              </View>
+            )}
+            
             <View style={styles.actionButtons}>
               {selectedLocation?.visitStatus === 'pending' && (
                 <TouchableOpacity
@@ -653,8 +910,25 @@ export default function NotificationsScreen() {
                     <Text style={styles.actionButtonText}>Uploading...</Text>
                   ) : (
                     <>
-                      <Ionicons name="camera" size={16} color="#fff" />
+                      <Ionicons name="play" size={16} color="#fff" />
                       <Text style={styles.actionButtonText}>Start Visit</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {selectedLocation?.visitStatus === 'reached' && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.completeButton, uploadingImage && styles.disabledButton]}
+                  onPress={() => updateVisitLocationStatus(selectedLocation._id, 'completed')}
+                  disabled={uploadingImage}
+                >
+                  {uploadingImage ? (
+                    <Text style={styles.actionButtonText}>Uploading...</Text>
+                  ) : (
+                    <>
+                      <Ionicons name="camera" size={16} color="#fff" />
+                      <Text style={styles.actionButtonText}>Upload & Complete</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -670,7 +944,7 @@ export default function NotificationsScreen() {
                   userLocation.longitude,
                   selectedLocation.location.latitude,
                   selectedLocation.location.longitude
-                ) <= 50 && (
+                ) <= 50 ? (
                   <TouchableOpacity
                     style={[styles.actionButton, styles.completeButton, uploadingImage && styles.disabledButton]}
                     onPress={() => updateVisitLocationStatus(selectedLocation._id, 'completed')}
@@ -681,10 +955,17 @@ export default function NotificationsScreen() {
                     ) : (
                       <>
                         <Ionicons name="camera" size={16} color="#fff" />
-                        <Text style={styles.actionButtonText}>Complete</Text>
+                        <Text style={styles.actionButtonText}>Upload & Complete</Text>
                       </>
                     )}
                   </TouchableOpacity>
+                ) : (
+                  <View style={styles.locationWarning}>
+                    <Ionicons name="warning" size={16} color="#FF9800" />
+                    <Text style={styles.locationWarningText}>
+                      You must be within 50m of the location to upload image and complete this task
+                    </Text>
+                  </View>
                 )
               )}
               
@@ -711,7 +992,16 @@ export default function NotificationsScreen() {
   const pendingLocations = filteredLocations
     .filter(location => location.visitStatus !== 'completed')
     .sort((a, b) => {
-      // Sort by visitDate ascending (earliest first)
+      // Sort by status priority: reached > in-progress > pending, then by visitDate
+      const statusPriority = { 'reached': 3, 'in-progress': 2, 'pending': 1 };
+      const priorityA = statusPriority[a.visitStatus] || 0;
+      const priorityB = statusPriority[b.visitStatus] || 0;
+      
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA; // Higher priority first
+      }
+      
+      // If same priority, sort by visitDate ascending (earliest first)
       const dateA = a.visitDate ? new Date(a.visitDate) : new Date(0);
       const dateB = b.visitDate ? new Date(b.visitDate) : new Date(0);
       return dateA - dateB;
@@ -1162,5 +1452,37 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  // Location status styles
+  locationStatusContainer: {
+    backgroundColor: '#f8f9fa',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  locationStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationStatusText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  locationWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff3cd',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffeaa7',
+    marginBottom: 10,
+  },
+  locationWarningText: {
+    fontSize: 12,
+    color: '#856404',
+    marginLeft: 8,
+    flex: 1,
   },
 });
