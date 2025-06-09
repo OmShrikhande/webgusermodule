@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import { setupLocalNotifications } from '../notificationService';
 
 // Get the local IP address automatically from Expo
 const { debuggerHost } = Constants.expoConfig?.hostUri
@@ -35,6 +37,14 @@ const NotificationPage = ({ visible, onClose }) => {
   useEffect(() => {
     if (visible) {
       fetchVisitLocations();
+      
+      // Set up polling for new tasks every 30 seconds when the page is visible
+      const pollingInterval = setInterval(() => {
+        fetchVisitLocations();
+      }, 30000);
+      
+      // Clean up the interval when the component is hidden
+      return () => clearInterval(pollingInterval);
     }
   }, [visible]);
 
@@ -51,6 +61,26 @@ const NotificationPage = ({ visible, onClose }) => {
       setFilteredLocations(filtered);
     }
   }, [searchQuery, visitLocations]);
+
+  // Helper function to show task notifications
+  const showTaskNotification = async (title, body, data = {}) => {
+    try {
+      // Ensure we have notification permissions
+      const permissionGranted = await setupLocalNotifications();
+      if (!permissionGranted) return;
+      
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data,
+        },
+        trigger: null, // Show immediately
+      });
+    } catch (error) {
+      console.error('Error showing task notification:', error);
+    }
+  };
 
   const fetchVisitLocations = async () => {
     try {
@@ -70,6 +100,22 @@ const NotificationPage = ({ visible, onClose }) => {
       });
 
       if (response.data.success) {
+        // Compare with current tasks to identify new ones
+        const currentIds = visitLocations.map(loc => loc._id);
+        const newLocations = response.data.visitLocations.filter(loc => !currentIds.includes(loc._id));
+        
+        // Notify for new tasks
+        if (newLocations.length > 0) {
+          // Show a notification for each new task
+          for (const location of newLocations) {
+            showTaskNotification(
+              'New Visit Location',
+              `You have been assigned to: ${location.location?.address || 'New location'}`,
+              { type: 'new_task', taskId: location._id }
+            );
+          }
+        }
+        
         setVisitLocations(response.data.visitLocations);
         setFilteredLocations(response.data.visitLocations);
       }
@@ -130,6 +176,36 @@ const NotificationPage = ({ visible, onClose }) => {
         }
         
         Alert.alert('Success', `Visit status updated to ${newStatus}`);
+        
+        // Show system notification based on status
+        const location = visitLocations.find(loc => loc._id === visitLocationId);
+        const address = location?.location?.address || 'Location';
+        
+        let notificationTitle = 'Visit Status Updated';
+        let notificationBody = `Visit to ${address} `;
+        
+        switch(newStatus) {
+          case 'in-progress':
+            notificationTitle = 'Visit Started';
+            notificationBody += 'has been started';
+            break;
+          case 'completed':
+            notificationTitle = 'Visit Completed';
+            notificationBody += 'has been completed';
+            break;
+          case 'cancelled':
+            notificationTitle = 'Visit Cancelled';
+            notificationBody += 'has been cancelled';
+            break;
+          default:
+            notificationBody += `status changed to ${newStatus}`;
+        }
+        
+        showTaskNotification(
+          notificationTitle, 
+          notificationBody,
+          { type: 'task_status_update', taskId: visitLocationId, status: newStatus }
+        );
       }
     } catch (error) {
       console.error('Error updating visit location status:', error);

@@ -25,6 +25,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { pickImageForStatus, openCamera, openGallery } from '@/utils/imagePickerUtils';
+import * as Notifications from 'expo-notifications';
+import { setupLocalNotifications } from '@/notificationService';
 
 // Get the local IP address automatically from Expo
 const { debuggerHost } = Constants.expoConfig?.hostUri
@@ -77,6 +79,26 @@ export default function NotificationsScreen() {
     }
   }, [searchQuery, visitLocations]);
 
+  // Helper function to show task notifications
+  const showTaskNotification = async (title, body, data = {}) => {
+    try {
+      // Ensure we have notification permissions
+      const permissionGranted = await setupLocalNotifications();
+      if (!permissionGranted) return;
+      
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data,
+        },
+        trigger: null, // Show immediately
+      });
+    } catch (error) {
+      console.error('Error showing task notification:', error);
+    }
+  };
+
   const fetchVisitLocations = async () => {
     if (!userId) return;
     
@@ -96,8 +118,46 @@ export default function NotificationsScreen() {
       });
 
       if (response.data.success) {
-        setVisitLocations(response.data.visitLocations);
-        setFilteredLocations(response.data.visitLocations);
+        // Check for new or deleted visit locations
+        const currentLocations = visitLocations || [];
+        const newLocations = response.data.visitLocations;
+        
+        // Find new visit locations (ones that weren't in the previous list)
+        const currentIds = currentLocations.map(loc => loc._id);
+        const addedLocations = newLocations.filter(loc => !currentIds.includes(loc._id));
+        
+        // Find deleted visit locations (ones that were in the previous list but not in the new list)
+        const newIds = newLocations.map(loc => loc._id);
+        const deletedLocations = currentLocations.filter(loc => !newIds.includes(loc._id));
+        
+        // Notify about new visit locations
+        if (addedLocations.length > 0) {
+          console.log(`Detected ${addedLocations.length} new visit locations`);
+          
+          for (const location of addedLocations) {
+            await showTaskNotification(
+              'New Visit Assignment',
+              `Visit to ${location.location?.address || 'new location'} has been assigned to you.`,
+              { type: 'visit_assignment', visitLocationId: location._id }
+            );
+          }
+        }
+        
+        // Notify about deleted visit locations
+        if (deletedLocations.length > 0) {
+          console.log(`Detected ${deletedLocations.length} deleted visit locations`);
+          
+          for (const location of deletedLocations) {
+            await showTaskNotification(
+              'Visit Assignment Removed',
+              `Visit to ${location.location?.address || 'a location'} has been removed.`,
+              { type: 'visit_deletion', visitLocationId: location._id }
+            );
+          }
+        }
+        
+        setVisitLocations(newLocations);
+        setFilteredLocations(newLocations);
       }
     } catch (error) {
       console.error('Error fetching visit locations:', error);
@@ -110,7 +170,35 @@ export default function NotificationsScreen() {
   useFocusEffect(
     React.useCallback(() => {
       if (userId) {
-        fetchVisitLocations();
+        // Check if tasks were updated in the background
+        const checkForUpdates = async () => {
+          const taskUpdated = await AsyncStorage.getItem('taskUpdated');
+          if (taskUpdated === 'true') {
+            console.log('Tasks were updated in the background - refreshing now');
+            fetchVisitLocations();
+            // Reset the flag
+            await AsyncStorage.setItem('taskUpdated', 'false');
+          } else {
+            // Initial fetch anyway
+            fetchVisitLocations();
+          }
+        };
+        
+        checkForUpdates();
+        
+        // Set up polling for automatic updates while on this screen
+        let pollCount = 0;
+        const pollingInterval = setInterval(() => {
+          // Only log occasionally to reduce console spam
+          pollCount = (pollCount + 1) % 5;
+          if (pollCount === 0) {
+            console.log('Auto-refreshing visit locations on notifications screen...');
+          }
+          fetchVisitLocations();
+        }, 20000); // Set to 20000 ms (20 seconds)
+        
+        // Clean up interval when screen loses focus
+        return () => clearInterval(pollingInterval);
       }
     }, [userId])
   );

@@ -12,31 +12,36 @@ const { debuggerHost } = Constants.expoConfig?.hostUri
 const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
 const API_URL = `http://${localIP}:5000`;
 
-// Configure notifications
+// Configure notifications - PARTIALLY ENABLED (login/logout only)
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    // Check notification type
+    const data = notification.request.content.data || {};
+    
+    // Only allow login and logout notifications
+    if (data.type === 'login' || data.type === 'login_sticky' || data.type === 'logout') {
+      return {
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      };
+    } else {
+      // Disable all other notifications
+      return {
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
+      };
+    }
+  },
 });
 
-// Register for push notifications
-export async function registerForPushNotifications() {
-  let token;
-  
-  if (Platform.OS === 'android') {
-    // Set notification channel for Android
-    await Notifications.setNotificationChannelAsync('location-tracking', {
-      name: 'Location Tracking',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
-    });
-  }
-  
-  if (Device.isDevice) {
-    // Check existing permissions
+// Set up local notifications
+export async function setupLocalNotifications() {
+  try {
+    // Request notification permissions
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     
@@ -46,49 +51,26 @@ export async function registerForPushNotifications() {
       finalStatus = status;
     }
     
-    // Cannot get push token if permission is not granted
     if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
-      return;
+      console.log('Failed to get permission for notifications!');
+      return false;
     }
     
-    // Get push token
-    token = (await Notifications.getExpoPushTokenAsync({
-      projectId: Constants.expoConfig?.extra?.eas?.projectId,
-    })).data;
-    
-    console.log('Push token:', token);
-    
-    // Store token in AsyncStorage
-    await AsyncStorage.setItem('pushToken', token);
-    
-    // Send token to backend
-    const userId = await AsyncStorage.getItem('userId');
-    const authToken = await AsyncStorage.getItem('token');
-    
-    if (userId && authToken) {
-      try {
-        await fetch(`${API_URL}/api/register-device`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: JSON.stringify({
-            userId,
-            pushToken: token,
-            deviceInfo: {
-              platform: Platform.OS,
-              model: Device.modelName,
-            }
-          }),
-        });
-      } catch (error) {
-        console.error('Error registering device for push notifications:', error);
-      }
+    if (Platform.OS === 'android') {
+      // Set notification channel for Android
+      await Notifications.setNotificationChannelAsync('app-notifications', {
+        name: 'App Notifications',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
     }
-  } else {
-    console.log('Must use physical device for push notifications');
+    
+    console.log('Notification permissions granted');
+    return true;
+  } catch (error) {
+    console.error('Error setting up notifications:', error);
+    return false;
   }
 }
 
@@ -99,6 +81,152 @@ export async function showTrackingNotification() {
       title: "Location Tracking Active",
       body: "Your location is being tracked in the background. Please don't force close the app.",
       data: { type: 'tracking_reminder' },
+      sticky: false,
+      autoDismiss: true,
+    },
+    trigger: null, // Show immediately
+  });
+}
+
+// Show a login notification
+export async function showLoginNotification(timestamp) {
+  // First, cancel any existing login notifications
+  await cancelLoginNotifications();
+  
+  try {
+    // Cancel ALL previous notifications first to clear any duplicates
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    await Notifications.dismissAllNotificationsAsync();
+    
+    // Regular notification
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Login Successful",
+        body: `You logged in at ${new Date(timestamp).toLocaleTimeString()}`,
+        data: { type: 'login' },
+        sticky: false,
+        autoDismiss: true,
+      },
+      trigger: null, // Show immediately
+    });
+    
+    // Create ONLY ONE sticky notification
+    if (Platform.OS === 'android') {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Login Session Active",
+          body: "Your attendance tracking is active. Don't force close the app.",
+          data: { type: 'login_sticky' },
+          // Android-specific options
+          sticky: true, // Prevent notification from being dismissed automatically
+          ongoing: true, // User can't dismiss by swiping
+          color: '#4CAF50',
+        },
+        identifier: 'login-sticky-notification', // Use a fixed identifier for this notification
+        trigger: null, // Show immediately
+      });
+    }
+    
+    console.log('Login notifications created successfully');
+  } catch (error) {
+    console.error('Error creating login notifications:', error);
+  }
+}
+
+// Cancel existing login notifications
+export async function cancelLoginNotifications() {
+  try {
+    // Cancel the specific sticky login notification by identifier
+    await Notifications.cancelScheduledNotificationAsync('login-sticky-notification');
+    
+    // Get all active notifications
+    const activeNotifications = await Notifications.getPresentedNotificationsAsync();
+    
+    // Find and dismiss any login-related notifications
+    for (const notification of activeNotifications) {
+      const data = notification.request.content.data;
+      if (data && (data.type === 'login' || data.type === 'login_sticky')) {
+        await Notifications.dismissNotificationAsync(notification.identifier);
+      }
+    }
+    
+    console.log('All login notifications cleared successfully');
+  } catch (error) {
+    console.error('Error canceling login notifications:', error);
+    
+    // As a fallback, try to dismiss all notifications
+    try {
+      await Notifications.dismissAllNotificationsAsync();
+    } catch (err) {
+      console.error('Failed to dismiss all notifications:', err);
+    }
+  }
+}
+
+// Show a logout notification
+export async function showLogoutNotification(timestamp) {
+  // Cancel the sticky login notification first
+  await cancelLoginNotifications();
+  
+  // Reset notification tracking for tasks
+  await AsyncStorage.removeItem('notifiedTaskIds');
+  
+  // Show logout notification
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "Logout Successful",
+      body: `You logged out at ${new Date(timestamp).toLocaleTimeString()}`,
+      data: { type: 'logout' },
+      sticky: false,
+      autoDismiss: true,
+    },
+    trigger: null, // Show immediately
+  });
+}
+
+// Show a task assignment notification
+export async function showTaskAssignmentNotification(taskTitle) {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "New Task Assigned",
+      body: `You have been assigned a new task: ${taskTitle}`,
+      data: { type: 'task_assignment' },
+      sticky: false, // Make sure it's not sticky
+      autoDismiss: true, // Allow system to dismiss it
+    },
+    trigger: null, // Show immediately
+  });
+}
+
+// Show a task status update notification
+export async function showTaskStatusUpdateNotification(taskTitle, status) {
+  let title = "Task Update";
+  let body = `Task "${taskTitle}" `;
+  
+  switch(status) {
+    case 'In Progress':
+      title = "Task Started";
+      body += "has been started";
+      break;
+    case 'Completed':
+      title = "Task Completed";
+      body += "has been completed";
+      break;
+    case 'Cancelled':
+      title = "Task Cancelled";
+      body += "has been cancelled";
+      break;
+    default:
+      body += `status changed to ${status}`;
+  }
+  
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body,
+      data: { type: 'task_status_update', status },
+      sticky: false, // Make sure it's not sticky
+      autoDismiss: true, // Allow system to dismiss it
     },
     trigger: null, // Show immediately
   });
@@ -115,6 +243,8 @@ export async function scheduleTrackingReminder() {
       title: "Location Tracking Reminder",
       body: "Please ensure the app remains running for continuous location tracking.",
       data: { type: 'tracking_reminder' },
+      sticky: false,
+      autoDismiss: true,
     },
     trigger: {
       seconds: 1800, // 30 minutes
@@ -144,10 +274,17 @@ export function setupNotificationListeners() {
     }
   });
   
-  // Return cleanup function
-  return () => {
-    foregroundSubscription.remove();
-    responseSubscription.remove();
+  // Instead of returning a cleanup function, we set up a cleanup for unmount
+  console.log('Notification listeners set up successfully');
+  
+  // Return the subscriptions in case we want to manually clean them up later
+  return {
+    foregroundSubscription,
+    responseSubscription,
+    cleanup: () => {
+      foregroundSubscription.remove();
+      responseSubscription.remove();
+    }
   };
 }
 

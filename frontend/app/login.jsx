@@ -21,6 +21,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import { showLoginNotification, setupLocalNotifications, cancelLoginNotifications } from '../notificationService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -227,6 +229,32 @@ export default function Login() {
           distance: location?.distance,
           isInOffice: location?.isInOffice,
         });
+        
+        // Show system notifications for successful login (including sticky notification)
+        try {
+          // First, clear any existing notifications to start fresh
+          await Notifications.dismissAllNotificationsAsync();
+          await cancelLoginNotifications();
+          
+          // Reset all notification tracking when logging in
+          await AsyncStorage.removeItem('notifiedTaskIds');
+          await AsyncStorage.removeItem('processingNotifications');
+          await AsyncStorage.removeItem('lastNotificationCheckTime');
+          await AsyncStorage.removeItem('currentLocations');
+          
+          // Small delay to ensure cleanup completes
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Ensure notification permissions are granted
+          const permissionGranted = await setupLocalNotifications();
+          if (permissionGranted) {
+            // This will show both the regular and sticky notifications
+            await showLoginNotification(new Date());
+            console.log('Login notifications shown successfully');
+          }
+        } catch (error) {
+          console.error('Error showing login notification:', error);
+        }
 
         // Show attendance message for 3 seconds before redirecting
         setIsLoading(false);

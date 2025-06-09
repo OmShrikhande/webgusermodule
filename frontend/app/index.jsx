@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 // Import LinearGradient for the background
 import { Colors } from '@/constants/Colors';
+import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 export default function Index() {
@@ -15,10 +17,30 @@ export default function Index() {
       headerShown: false, // Hide the header
     });
 
-    // Set a timeout for 1 second before redirecting
+    // EMERGENCY CLEANUP: Clear all notifications immediately (silently)
+    const emergencyCleanup = async () => {
+      try {
+        // Silently cancel all notifications
+        await Notifications.cancelAllScheduledNotificationsAsync();
+        await Notifications.dismissAllNotificationsAsync();
+        
+        // Clear all notification tracking data
+        await AsyncStorage.removeItem('notifiedTaskIds');
+        await AsyncStorage.removeItem('processingNotifications');
+        await AsyncStorage.removeItem('lastNotificationCheckTime');
+        await AsyncStorage.removeItem('currentLocations');
+      } catch (error) {
+        console.error('EMERGENCY CLEANUP: Failed', error);
+      }
+    };
+    
+    // Run the emergency cleanup
+    emergencyCleanup();
+
+    // Set a timeout for redirection
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 2000); // Delay of 1 second (1000ms)
+    }, 2000);
 
     // Clean up the timer
     return () => clearTimeout(timer);

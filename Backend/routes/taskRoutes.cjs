@@ -88,6 +88,7 @@ router.put('/tasks/:taskId/status', authenticateToken, async (req, res) => {
     try {
         const { taskId } = req.params;
         const { status } = req.body;
+        const userId = req.user.id || req.user.userId;
         
         const updateData = { status };
         if (status === 'Completed') {
@@ -98,13 +99,62 @@ router.put('/tasks/:taskId/status', authenticateToken, async (req, res) => {
             taskId,
             updateData,
             { new: true }
-        ).populate('assignedBy', 'name email');
+        ).populate('assignedBy', 'name email')
+          .populate('assignedTo', 'name email');
         
         if (!task) {
             return res.status(404).json({
                 success: false,
                 message: 'Task not found'
             });
+        }
+        
+        // Create notification for task status change
+        let notificationMessage = '';
+        switch(status) {
+            case 'In Progress':
+                notificationMessage = `Task "${task.title}" has been started`;
+                break;
+            case 'Completed':
+                notificationMessage = `Task "${task.title}" has been completed`;
+                break;
+            case 'Cancelled':
+                notificationMessage = `Task "${task.title}" has been cancelled`;
+                break;
+            default:
+                notificationMessage = `Task "${task.title}" status changed to ${status}`;
+        }
+        
+        // Create notification for task owner
+        const ownerNotification = new Notification({
+            userId: task.assignedBy,
+            message: notificationMessage,
+            data: { 
+                type: 'task_status_update', 
+                taskId: task._id,
+                taskTitle: task.title,
+                status: status,
+                updatedBy: userId,
+                timestamp: new Date()
+            }
+        });
+        await ownerNotification.save();
+        
+        // Create notification for assignee if they didn't make the change
+        if (task.assignedTo.toString() !== userId && task.assignedTo.toString() !== task.assignedBy.toString()) {
+            const assigneeNotification = new Notification({
+                userId: task.assignedTo,
+                message: notificationMessage,
+                data: { 
+                    type: 'task_status_update', 
+                    taskId: task._id,
+                    taskTitle: task.title,
+                    status: status,
+                    updatedBy: userId,
+                    timestamp: new Date()
+                }
+            });
+            await assigneeNotification.save();
         }
         
         return res.status(200).json({

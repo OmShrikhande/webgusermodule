@@ -5,6 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Colors } from '@/constants/Colors';
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import { cancelLoginNotifications, showLogoutNotification } from '@/notificationService';
 
 // Dynamically get local IP for API URL
 const { debuggerHost } = Constants.expoConfig?.hostUri
@@ -37,8 +39,30 @@ const LogoutButton = () => {
               // Optionally log error, but proceed with logout
               console.error('Error during logout:', error);
             } finally {
+              // Handle logout notifications
+              try {
+                // Cancel login notifications
+                await cancelLoginNotifications();
+                
+                // Show logout notification
+                await showLogoutNotification(new Date().getTime());
+                
+                // Clear all task notification tracking data
+                await AsyncStorage.removeItem('notifiedTaskIds');
+                await AsyncStorage.removeItem('processingNotifications');
+                await AsyncStorage.removeItem('lastNotificationCheckTime');
+                await AsyncStorage.removeItem('currentLocations');
+                await AsyncStorage.removeItem('taskUpdated');
+                await AsyncStorage.removeItem('lastTaskUpdateTime');
+              } catch (error) {
+                console.error('Error handling logout notifications:', error);
+              }
+              
+              // Clear auth data
               await AsyncStorage.removeItem('token');
               await AsyncStorage.removeItem('userId');
+              
+              // Navigate to login
               router.replace('/login');
             }
           },
