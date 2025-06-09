@@ -15,7 +15,8 @@
         "NSLocationWhenInUseUsageDescription": "This app uses your location to track your visits.",
         "UIBackgroundModes": [
           "location",
-          "fetch"
+          "fetch",
+          "remote-notification"
         ]
       }
     },
@@ -28,8 +29,12 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
-      ]
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ],
+      "useNextNotificationsApi": true
     },
     "web": {
       "bundler": "metro",

@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as TaskManager from 'expo-task-manager';
 
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -9,11 +10,42 @@ import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
-import { startBackgroundLocationTracking } from '../../locationService';
+import { startBackgroundLocationTracking, checkPermissions } from '../../locationService';
 
 export default function TabLayout() {
   useEffect(() => {
-    startBackgroundLocationTracking();
+    // Start background location tracking when the app loads
+    const startTracking = async () => {
+      try {
+        // First check if we have permissions
+        const hasPermissions = await checkPermissions();
+        
+        if (hasPermissions) {
+          await startBackgroundLocationTracking();
+          console.log('Background tracking initialized in TabLayout');
+        } else {
+          console.warn('Location permissions not granted');
+        }
+      } catch (error) {
+        console.error('Failed to start background location tracking:', error);
+      }
+    };
+    
+    // Start tracking immediately
+    startTracking();
+    
+    // Also restart tracking when app comes to foreground
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active') {
+        console.log('App has come to the foreground, checking tracking status');
+        startTracking();
+      }
+    });
+    
+    // Cleanup
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   return (
