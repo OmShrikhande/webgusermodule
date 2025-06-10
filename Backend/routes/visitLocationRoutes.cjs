@@ -88,7 +88,7 @@ router.put('/visit-locations/:visitLocationId/read', authenticateToken, async (r
 router.put('/visit-locations/:visitLocationId/status', authenticateToken, async (req, res) => {
     try {
         const { visitLocationId } = req.params;
-        const { visitStatus, userFeedback, userLocation } = req.body;
+        const { visitStatus, userFeedback, userLocation, autoCompleted } = req.body;
 
         // Find the visit location
         const visitLocation = await VisitLocation.findById(visitLocationId);
@@ -120,7 +120,11 @@ router.put('/visit-locations/:visitLocationId/status', authenticateToken, async 
                 assigned.longitude
             );
 
-            if (distance > maxAllowedDistance) {
+            // For auto-completion, allow completion within 50m radius
+            // For manual completion, keep the original distance check
+            const allowedDistance = autoCompleted ? 50 : maxAllowedDistance;
+            
+            if (distance > allowedDistance) {
                 return res.status(400).json({
                     success: false,
                     message: `You must be at the assigned location to complete this task. Distance: ${Math.round(distance)}m`
@@ -133,8 +137,17 @@ router.put('/visit-locations/:visitLocationId/status', authenticateToken, async 
         if (userFeedback) visitLocation.userFeedback = userFeedback;
         if (visitStatus === 'completed') {
             visitLocation.visitDate = new Date();
+            // Mark if this was auto-completed
+            if (autoCompleted) {
+                visitLocation.autoCompleted = true;
+                console.log(`✅ Auto-completing task ${visitLocationId} for user at distance: ${Math.round(distance)}m`);
+            } else {
+                console.log(`📝 Manual completion of task ${visitLocationId}`);
+            }
         }
         await visitLocation.save();
+        
+        console.log(`💾 Task ${visitLocationId} status updated to: ${visitStatus}`);
 
         return res.status(200).json({
             success: true,
@@ -170,7 +183,18 @@ router.post('/visit-locations', authenticateToken, async (req, res) => {
         const notification = new Notification({
             userId: userId,
             message: `New location visit assigned: ${location.address}`,
-            timestamp: new Date()
+            timestamp: new Date(),
+            data: {
+                type: 'visit_assignment',
+                visitLocationId: visitLocation._id,
+                address: location.address,
+                coordinates: {
+                    latitude: location.latitude,
+                    longitude: location.longitude
+                },
+                adminNotes: adminNotes,
+                visitDate: visitDate
+            }
         });
         
         await notification.save();
@@ -315,6 +339,56 @@ router.get('/test-auth', authenticateToken, async (req, res) => {
         return res.status(500).json({
             success: false,
             message: 'Test failed',
+            error: error.message
+        });
+    }
+});
+
+// Delete a visit location (for admin)
+router.delete('/visit-locations/:visitLocationId', authenticateToken, async (req, res) => {
+    try {
+        const { visitLocationId } = req.params;
+        
+        // Find the visit location to get userId before deletion
+        const visitLocation = await VisitLocation.findById(visitLocationId);
+        
+        if (!visitLocation) {
+            return res.status(404).json({
+                success: false,
+                message: 'Visit location not found'
+            });
+        }
+        
+        // Store userId for notification
+        const userId = visitLocation.userId;
+        const locationAddress = visitLocation.location?.address || 'Unknown location';
+        
+        // Delete the visit location
+        await VisitLocation.findByIdAndDelete(visitLocationId);
+        
+        // Create notification about the deletion
+        const notification = new Notification({
+            userId: userId,
+            message: `Visit assignment removed: ${locationAddress}`,
+            timestamp: new Date(),
+            data: {
+                type: 'visit_deletion',
+                visitLocationId: visitLocationId,
+                address: locationAddress
+            }
+        });
+        
+        await notification.save();
+        
+        return res.status(200).json({
+            success: true,
+            message: 'Visit location deleted successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting visit location:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error deleting visit location',
             error: error.message
         });
     }

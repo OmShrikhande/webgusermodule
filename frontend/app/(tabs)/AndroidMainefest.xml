@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.yourappname">  <!-- 🔁 Replace with your actual app package -->
+    package="com.omshrikhande.webgusermodule">  <!-- 🔁 Replace with your actual app package -->
 
     <!-- 📍 Permissions -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />

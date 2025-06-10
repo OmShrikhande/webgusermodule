@@ -21,6 +21,10 @@ const notificationSchema = new mongoose.Schema({
     timestamp: { 
         type: Date, 
         default: Date.now 
+    },
+    data: {
+        type: Object,
+        default: {}
     }
 }, { 
     collection: 'notifications',

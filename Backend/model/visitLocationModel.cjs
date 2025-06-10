@@ -20,11 +20,15 @@ const visitLocationSchema = new mongoose.Schema({
     },
     visitStatus: { 
         type: String, 
-        enum: ['pending', 'in-progress', 'completed', 'cancelled'],
+        enum: ['pending', 'reached', 'in-progress', 'completed', 'cancelled'],
         default: 'pending'
     },
     visitDate: { 
         type: Date 
+    },
+    autoCompleted: {
+        type: Boolean,
+        default: false
     },
     notificationSent: { 
         type: Boolean, 

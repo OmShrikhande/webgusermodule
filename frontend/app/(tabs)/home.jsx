@@ -4,9 +4,11 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert, Ani
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import NotificationPopup from '../../components/NotificationPopup';
+import { setupLocalNotifications } from '../../notificationService';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { Colors } from '@/constants/Colors';
@@ -285,6 +287,26 @@ const Home = () => {
     }
   };
 
+  // Helper function to show task notifications
+  const showTaskNotification = async (title, body, data = {}) => {
+    try {
+      // Ensure we have notification permissions
+      const permissionGranted = await setupLocalNotifications();
+      if (!permissionGranted) return;
+      
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data,
+        },
+        trigger: null, // Show immediately
+      });
+    } catch (error) {
+      console.error('Error showing task notification:', error);
+    }
+  };
+
   // Fetch visit locations
   const fetchVisitLocations = async () => {
     try {
@@ -300,6 +322,25 @@ const Home = () => {
       });
 
       if (response.data.success) {
+        // Check for new visit locations
+        const currentLocations = visitLocations || [];
+        const currentIds = currentLocations.map(loc => loc._id);
+        const newLocations = response.data.visitLocations.filter(loc => !currentIds.includes(loc._id));
+        
+        // Show notifications for new visit locations
+        if (newLocations.length > 0) {
+          console.log(`Found ${newLocations.length} new visit locations`);
+          
+          // Show a notification for each new location
+          for (const location of newLocations) {
+            await showTaskNotification(
+              'New Visit Location',
+              `You have been assigned to visit: ${location.location?.address || 'New location'}`,
+              { type: 'new_task', taskId: location._id }
+            );
+          }
+        }
+        
         setVisitLocations(response.data.visitLocations);
       }
     } catch (error) {
@@ -443,9 +484,17 @@ const Home = () => {
   // Focus effect to refresh data when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
+      // Initial data fetch
       fetchUserProfile();
       fetchUnreadTasksCount();
       fetchVisitLocations();
+      
+      // Set up polling for automatic updates (every 30 seconds)
+      const pollingInterval = setInterval(() => {
+        console.log('Auto-refreshing visit locations data...');
+        fetchUnreadTasksCount();
+        fetchVisitLocations();
+      }, 30000);
       
       // Start entrance animations
       Animated.parallel([
@@ -460,6 +509,9 @@ const Home = () => {
           useNativeDriver: true,
         }),
       ]).start();
+      
+      // Clean up interval when screen loses focus
+      return () => clearInterval(pollingInterval);
     }, [])
   );
 

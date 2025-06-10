@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const User = require('../model/usermodel.cjs');
 const Attendance = require('../model/attendanceModel.cjs');
+const Notification = require('../model/notificationModel.cjs');
 const { isWithinOfficeRange, calculateDistance } = require('../utils/locationUtils.cjs');
 const { officeLocation, maxAllowedDistance, attendanceStartTime, attendanceEndTime } = require('../config/locationConfig.cjs');
 
@@ -280,6 +281,18 @@ exports.login = async (req, res) => {
 
     // Update user's last login time
     await User.findByIdAndUpdate(user._id, { lastLoginTime: now });
+    
+    // Create login notification
+    const loginNotification = new Notification({
+      userId: user._id,
+      message: `You logged in at ${now.toLocaleTimeString()}`,
+      data: { 
+        type: 'login', 
+        timestamp: now,
+        status: attendanceStatus
+      }
+    });
+    await loginNotification.save();
 
     const token = jwt.sign(
       { userId: user._id, email: user.email },
@@ -472,11 +485,23 @@ exports.logoutUser = async (req, res) => {
     await User.findByIdAndUpdate(userId, { lastLogoutTime: now });
 
     // Update today's attendance record with logout time
-    await Attendance.findOneAndUpdate(
+    const attendance = await Attendance.findOneAndUpdate(
       { userId, date: today },
       { logoutTime: now },
       { new: true }
     );
+
+    // Create logout notification
+    const logoutNotification = new Notification({
+      userId: userId,
+      message: `You logged out at ${now.toLocaleTimeString()}`,
+      data: { 
+        type: 'logout', 
+        timestamp: now,
+        status: attendance?.status || 'unknown'
+      }
+    });
+    await logoutNotification.save();
 
     res.json({
       success: true,
