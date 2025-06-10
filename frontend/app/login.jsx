@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 
 const { width, height } = Dimensions.get('window');
@@ -40,6 +41,7 @@ export default function Login() {
   const [userLocation, setUserLocation] = useState(null);
   const [locationError, setLocationError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [expoPushToken, setExpoPushToken] = useState('');
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -51,8 +53,48 @@ export default function Login() {
   const navigation = useNavigation();
 
   useEffect(() => {
+    // Request permissions and get push token
+    registerForPushNotificationsAsync().then(token => {
+      if (token) {
+        setExpoPushToken(token);
+        // TODO: Send this token to your backend server
+        // For example:
+        // const userId = await AsyncStorage.getItem('userId');
+        // if (userId) {
+        //   axios.post(`${API_URL}/api/user/register-push-token`, { token, userId })
+        //     .then(() => console.log('Push token registered with backend'))
+        //     .catch(err => console.error('Failed to register push token', err));
+        // }
+        console.log('Expo Push Token:', token);
+      }
+    });
+
+    // Listener for incoming notifications when app is in foreground
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Notification received while app is foregrounded:', notification);
+      // You can add logic here, e.g., update state, show an in-app banner
+    });
+
+    // Listener for user interaction with a notification (tap)
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification response received:', response);
+      // Handle user tapping on the notification (e.g., navigate to a specific screen)
+      // const { data } = response.notification.request.content;
+      // if (data && data.screenToNavigate) {
+      //   router.push(data.screenToNavigate);
+      // }
+    });
+
+    return () => {
+      Notifications.removeNotificationSubscription(notificationListener);
+      Notifications.removeNotificationSubscription(responseListener);
+    };
+  }, []);
+
+
+  useEffect(() => {
     navigation.setOptions({ headerShown: false });
-    
+
     // Start entrance animations
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -101,7 +143,46 @@ export default function Login() {
     requestLocationPermission().then((granted) => {
       if (granted) getUserLocation();
     });
-  }, [navigation]);
+  }, [navigation, fadeAnim, slideAnim, scaleAnim, logoRotateAnim, pulseAnim]); // Added animation refs to dependency array
+
+  // Function to register for push notifications
+  async function registerForPushNotificationsAsync() {
+    let token;
+    if (Constants.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        console.warn('Push notification permission not granted.');
+        // Optionally, inform the user that they will not receive notifications
+        return;
+      }
+      try {
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+        if (!projectId) {
+          console.warn("Project ID not found in app config. Push notifications might not work as expected. Ensure 'extra.eas.projectId' is set.");
+        }
+        token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      } catch (e) {
+        console.error("Error getting Expo push token", e);
+      }
+    } else {
+      console.log('Push notifications require a physical device.');
+    }
+
+    if (Platform.OS === 'android') {
+      Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C', // You can customize this
+      });
+    }
+    return token;
+  }
 
   // Request location permission
   const requestLocationPermission = async () => {
@@ -212,6 +293,17 @@ export default function Login() {
       } else {
         await AsyncStorage.removeItem('userId');
       }
+
+      // Schedule a local notification for successful login
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Login Successful! 🎉",
+          body: `Welcome back, ${email}! You're now signed in.`,
+          data: { screenToNavigate: '/(tabs)/home' }, // Example data
+        },
+        trigger: { seconds: 1 }, // Show 1 second after login
+      });
+      console.log('Login success notification scheduled.');
 
       // Set attendance information
       if (attendanceTime && attendanceDate) {
