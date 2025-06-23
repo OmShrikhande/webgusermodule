@@ -7,13 +7,9 @@ import { Colors } from '@/constants/Colors';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { cancelLoginNotifications, showLogoutNotification } from '@/notificationService';
+import { API_URL } from '../../constants';
 
-// Dynamically get local IP for API URL
-const { debuggerHost } = Constants.expoConfig?.hostUri
-  ? { debuggerHost: Constants.expoConfig.hostUri }
-  : { debuggerHost: undefined };
-const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
-const API_URL = `http://${localIP}:5000`;
+// API_URL is now imported from constants.js
 
 const LogoutButton = () => {
   const handleLogout = async () => {

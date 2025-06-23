@@ -8,7 +8,16 @@ const Notification = require('../model/notificationModel.cjs');
 const { isWithinOfficeRange, calculateDistance } = require('../utils/locationUtils.cjs');
 const { officeLocation, maxAllowedDistance, attendanceStartTime, attendanceEndTime } = require('../config/locationConfig.cjs');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
+// Check if JWT_SECRET is defined
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('WARNING: JWT_SECRET environment variable is not defined');
+  console.error('Using a default secret key - THIS IS NOT SECURE FOR PRODUCTION');
+  // Use a random string as a fallback, but log a warning
+  const fallbackSecret = 'fallback_jwt_secret_' + Math.random().toString(36).substring(2);
+  console.error('Using fallback secret. Please set JWT_SECRET in your environment variables.');
+  JWT_SECRET = fallbackSecret;
+}
 
 // Helper function to get current date and time in IST
 function getISTDate(date = new Date()) {
@@ -16,17 +25,29 @@ function getISTDate(date = new Date()) {
 }
 
 exports.loginUser = async (req, res) => {
-  const { email, password, location } = req.body;
+  console.log('Login attempt:', { email: req.body.email });
+  
   try {
+    const { email, password, location } = req.body;
+    
     // Validate input
     if (!email || !password) {
+      console.log('Login failed: Email and password are required');
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email });
+    console.log('Finding user with email:', email);
+    const user = await User.findOne({ email }).catch(err => {
+      console.error('Database error when finding user:', err);
+      throw new Error('Database error when finding user');
+    });
+    
     if (!user) {
+      console.log('Login failed: User not found');
       return res.status(404).json({ message: 'User not found' });
     }
+    
+    console.log('User found:', { userId: user._id });
 
     // Check if password field exists
     if (!user.password) {

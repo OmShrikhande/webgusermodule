@@ -44,12 +44,8 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   return R * c; // Distance in meters
 };
 
-// Get the local IP address automatically from Expo
-const { debuggerHost } = Constants.expoConfig?.hostUri
-  ? { debuggerHost: Constants.expoConfig.hostUri }
-  : { debuggerHost: undefined };
-const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
-const API_URL = `http://${localIP}:5000`;
+// Import API_URL from constants.js
+import { API_URL } from '../../constants';
 
 // Now define TaskManager task
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {

@@ -13,13 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
+import { API_URL } from '../constants';
 
-// Get the local IP address automatically from Expo
-const { debuggerHost } = Constants.expoConfig?.hostUri
-  ? { debuggerHost: Constants.expoConfig.hostUri }
-  : { debuggerHost: undefined };
-const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
-const API_URL = `http://${localIP}:5000`;
+// API_URL is now imported from constants.js
 
 const NotificationBar = () => {
   const [notifications, setNotifications] = useState([]);

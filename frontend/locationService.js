@@ -5,12 +5,8 @@ import Constants from 'expo-constants';
 
 const LOCATION_TASK_NAME = 'background-location-task';
 
-// Get the local IP address automatically from Expo
-const { debuggerHost } = Constants.expoConfig?.hostUri
-  ? { debuggerHost: Constants.expoConfig.hostUri }
-  : { debuggerHost: undefined };
-const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
-const API_URL = `http://${localIP}:5000`;
+// Import API_URL from constants.js
+import { API_URL } from './constants';
 
 // Define the background task
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {

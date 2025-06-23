@@ -28,7 +28,7 @@ const Header = ({ user, onEditAvatar }) => {
       return profileImage;
     }
     if (profileImage.startsWith('/uploads/')) {
-      return `${API_URL}${profileImage}`;
+      return `https://webgusermodule.onrender.com/${profileImage}`;
     }
     return profileImage;
   };

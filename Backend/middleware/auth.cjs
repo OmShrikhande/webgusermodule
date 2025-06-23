@@ -1,5 +1,15 @@
 const jwt = require('jsonwebtoken');
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
+
+// Check if JWT_SECRET is defined
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('WARNING: JWT_SECRET environment variable is not defined in auth middleware');
+  console.error('Using a default secret key - THIS IS NOT SECURE FOR PRODUCTION');
+  // Use a random string as a fallback, but log a warning
+  const fallbackSecret = 'fallback_jwt_secret_' + Math.random().toString(36).substring(2);
+  console.error('Using fallback secret. Please set JWT_SECRET in your environment variables.');
+  JWT_SECRET = fallbackSecret;
+}
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];

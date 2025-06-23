@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
+import { API_URL } from '../constants';
 import * as Notifications from 'expo-notifications';
 import { 
   showLoginNotification, 
@@ -12,12 +13,7 @@ import {
   setupLocalNotifications
 } from '../notificationService';
 
-// Get the local IP address automatically from Expo
-const { debuggerHost } = Constants.expoConfig?.hostUri
-  ? { debuggerHost: Constants.expoConfig.hostUri }
-  : { debuggerHost: undefined };
-const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
-const API_URL = `http://${localIP}:5000`;
+// API_URL is now imported from constants.js
 
 // This component doesn't render anything but runs in the background to listen for notifications
 const NotificationListener = () => {

@@ -5,12 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { startBackgroundLocationTracking } from './locationService';
 
-// Get the local IP address automatically from Expo
-const { debuggerHost } = Constants.expoConfig?.hostUri
-  ? { debuggerHost: Constants.expoConfig.hostUri }
-  : { debuggerHost: undefined };
-const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
-const API_URL = `http://${localIP}:5000`;
+// Import API_URL from constants.js
+import { API_URL } from './constants';
 
 // Configure notifications - PARTIALLY ENABLED (login/logout only)
 Notifications.setNotificationHandler({

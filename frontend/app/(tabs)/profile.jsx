@@ -25,12 +25,8 @@ import {
 } from '@/components/profile';
 import { useTheme } from '@/context/ThemeContext';
 
-// Use expoConfig instead of manifest
-const { debuggerHost } = Constants.expoConfig?.hostUri
-  ? { debuggerHost: Constants.expoConfig.hostUri }
-  : { debuggerHost: undefined };
-const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
-const API_URL = `http://${localIP}:5000`;
+// Import API_URL from constants.js
+import { API_URL } from '../../constants';
 
 const Profile = () => {
   const navigation = useNavigation();

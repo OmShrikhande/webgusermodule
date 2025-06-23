@@ -28,12 +28,8 @@ import { pickImageForStatus, openCamera, openGallery } from '@/utils/imagePicker
 import * as Notifications from 'expo-notifications';
 import { setupLocalNotifications } from '@/notificationService';
 
-// Get the local IP address automatically from Expo
-const { debuggerHost } = Constants.expoConfig?.hostUri
-  ? { debuggerHost: Constants.expoConfig.hostUri }
-  : { debuggerHost: undefined };
-const localIP = debuggerHost ? debuggerHost.split(':').shift() : 'localhost';
-const API_URL = `http://${localIP}:5000`;
+// Import API_URL from constants.js
+import { API_URL } from '../../constants';
 
 export default function NotificationsScreen() {
   const [visitLocations, setVisitLocations] = useState([]);

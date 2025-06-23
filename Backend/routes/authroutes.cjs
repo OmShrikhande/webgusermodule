@@ -19,6 +19,11 @@ const transporter = nodemailer.createTransport({
     }
 });
 
+// Add a simple test endpoint
+router.get('/test', (req, res) => {
+    res.status(200).json({ message: 'Auth routes are working' });
+});
+
 // Existing routes
 router.post('/login', authController.login);
 router.post('/admin/login', authController.loginUser);
