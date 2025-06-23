@@ -22,7 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications';
+// import * as Notifications from 'expo-notifications';
 import { showLoginNotification, setupLocalNotifications, cancelLoginNotifications } from '../notificationService';
 
 const { width, height } = Dimensions.get('window');
