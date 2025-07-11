@@ -46,12 +46,26 @@ app.get('/', (req, res) => {
 
 // Connect to MongoDB
 console.log('Connecting to MongoDB...');
+console.log('MONGO_URI defined:', !!process.env.MONGO_URI);
+console.log('MONGO_URI starts with:', process.env.MONGO_URI ? process.env.MONGO_URI.substring(0, 20) + '...' : 'undefined');
+
+// Try to connect to MongoDB
 connectDB()
   .then(() => {
     console.log('MongoDB connected successfully');
   })
   .catch(err => {
     console.error('MongoDB connection error:', err);
+    console.error('This is a critical error. The application will continue to run but database operations will fail.');
+    
+    // Log more details about the error
+    if (err.name === 'MongoServerSelectionError') {
+      console.error('Could not connect to any MongoDB server.');
+      console.error('Please check:');
+      console.error('1. Your MongoDB Atlas cluster is running');
+      console.error('2. Your IP whitelist includes 0.0.0.0/0 or the Render.com IP');
+      console.error('3. Your MongoDB Atlas username and password are correct');
+    }
   });
 
 // API routes
